@@ -983,8 +983,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1003,8 +1001,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1023,10 +1019,13 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
-                  <Parameters />
+                  <Parameters>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
+                    </Parameter>
+                  </Parameters>
                   <CultureName />
                   <SortOrder>3</SortOrder>
                   <WebExec>true</WebExec>
@@ -1035,8 +1034,36 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
+              <UseCustomTemplate>true</UseCustomTemplate>
+              <CustomTemplate>@using Seal.Model
+@{
+    Report report = Model;
+    ReportView view = report.CurrentView;
+    int index = 0;
+    var views = view.Views.OrderBy(i =&gt; i.SortOrder).ToList();
+    foreach (string row in view.GetGridLayoutRows(view.GetValue("grid_layout").Trim()))
+    {
+        &lt;div class="row"&gt;
+            @foreach (string col in view.GetGridLayoutColumns(row))
+            {
+                &lt;div class="@view.GetGridLayoutColumnClass(col)" style="height: 400px;"&gt;
+                    @if (index &lt; view.Views.Count &amp;&amp; view.IsGridLayoutColumnForModel(col))
+                {
+                        @Raw(views[index++].Parse())
+                }
+                &lt;/div&gt;
+            }
+        &lt;/div&gt;
+    }
+    //Remaining views
+    while (index &lt; views.Count)
+    {
+        &lt;div class="row"&gt;
+            @Raw(views[index++].Parse())
+        &lt;/div&gt;
+    }
+}
+</CustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1052,9 +1079,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>bff6defa-3e89-4bfa-b2d0-08f01a0282af</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1076,8 +1101,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1096,8 +1119,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1116,10 +1137,13 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
-                  <Parameters />
+                  <Parameters>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
+                    </Parameter>
+                  </Parameters>
                   <CultureName />
                   <SortOrder>3</SortOrder>
                   <WebExec>true</WebExec>
@@ -1128,8 +1152,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1145,9 +1167,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>b3ab79bd-19f8-41af-af1d-29066fb7a4b7</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1169,8 +1189,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1189,8 +1207,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1209,13 +1225,15 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
                       <Name>plotly_scatter_mode</Name>
                       <Value>markers</Value>
+                    </Parameter>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
                     </Parameter>
                   </Parameters>
                   <CultureName />
@@ -1226,8 +1244,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1243,9 +1259,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>7ad0c9e9-77d3-467a-a9ec-02071d38449b</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1267,8 +1281,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1287,8 +1299,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1307,10 +1317,13 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
-                  <Parameters />
+                  <Parameters>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
+                    </Parameter>
+                  </Parameters>
                   <CultureName />
                   <SortOrder>3</SortOrder>
                   <WebExec>true</WebExec>
@@ -1319,8 +1332,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1336,9 +1347,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>3e157223-fb3a-464d-ab56-0c7a71c3756c</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1360,8 +1369,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1380,8 +1387,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1400,10 +1405,13 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
-                  <Parameters />
+                  <Parameters>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
+                    </Parameter>
+                  </Parameters>
                   <CultureName />
                   <SortOrder>3</SortOrder>
                   <WebExec>true</WebExec>
@@ -1412,8 +1420,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1429,9 +1435,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>6425108a-6420-44cd-a4f6-60e9b228f889</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1453,14 +1457,8 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
-                    <Parameter>
-                      <Name>chartjs_width</Name>
-                      <Value>450px</Value>
-                    </Parameter>
                     <Parameter>
                       <Name>chartjs_title</Name>
                       <Value>Chart JS</Value>
@@ -1477,8 +1475,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1497,10 +1493,13 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
-                  <Parameters />
+                  <Parameters>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
+                    </Parameter>
+                  </Parameters>
                   <CultureName />
                   <SortOrder>3</SortOrder>
                   <WebExec>true</WebExec>
@@ -1509,8 +1508,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1526,9 +1523,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>c8de94d3-c1ee-4bd7-bda5-fd88ceffabf6</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1550,8 +1545,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1570,8 +1563,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1590,13 +1581,15 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
                       <Name>plotly_scatter_mode</Name>
                       <Value>markers</Value>
+                    </Parameter>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
                     </Parameter>
                   </Parameters>
                   <CultureName />
@@ -1607,8 +1600,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1624,9 +1615,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>41626f41-00cf-4bd8-ac5b-62d99ec44e4f</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1648,8 +1637,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1668,8 +1655,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1688,13 +1673,15 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
                       <Name>plotly_scatter_mode</Name>
                       <Value>markers</Value>
+                    </Parameter>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
                     </Parameter>
                   </Parameters>
                   <CultureName />
@@ -1705,8 +1692,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1722,9 +1707,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>27bcfeaa-b61f-4ba5-8c02-6be7e4c9f0dd</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1746,8 +1729,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1766,8 +1747,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1786,13 +1765,15 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
                       <Name>plotly_scatter_mode</Name>
                       <Value>markers</Value>
+                    </Parameter>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
                     </Parameter>
                   </Parameters>
                   <CultureName />
@@ -1803,8 +1784,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1820,9 +1799,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>71f52fff-b68c-438b-8f74-41243c4e180a</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1844,8 +1821,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1868,8 +1843,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1892,10 +1865,13 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
-                  <Parameters />
+                  <Parameters>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
+                    </Parameter>
+                  </Parameters>
                   <CultureName />
                   <SortOrder>3</SortOrder>
                   <WebExec>true</WebExec>
@@ -1904,8 +1880,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -1921,9 +1895,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>f2caf022-fb55-450a-b0c9-ee2bf4508c51</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -1945,8 +1917,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1965,8 +1935,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -1985,10 +1953,13 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
-                  <Parameters />
+                  <Parameters>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
+                    </Parameter>
+                  </Parameters>
                   <CultureName />
                   <SortOrder>3</SortOrder>
                   <WebExec>true</WebExec>
@@ -1997,8 +1968,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -2014,9 +1983,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>980463f9-50f4-4eac-afa8-f8a025f6d6fd</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -2038,8 +2005,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart JS</Name>
                   <Views />
                   <TemplateName>Chart JS</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -2062,8 +2027,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart NVD3</Name>
                   <Views />
                   <TemplateName>Chart NVD3</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -2082,8 +2045,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                   <Name>Chart Plotly</Name>
                   <Views />
                   <TemplateName>Chart Plotly</TemplateName>
-                  <ThemeName />
-                  <UseCustomTemplate>false</UseCustomTemplate>
                   <PartialTemplates />
                   <Parameters>
                     <Parameter>
@@ -2094,6 +2055,10 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                       <Name>plotly_bar_orientation</Name>
                       <Value>h</Value>
                     </Parameter>
+                    <Parameter>
+                      <Name>plotly_title</Name>
+                      <Value>Chart Plotly</Value>
+                    </Parameter>
                   </Parameters>
                   <CultureName />
                   <SortOrder>3</SortOrder>
@@ -2103,8 +2068,6 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
                 </ReportView>
               </Views>
               <TemplateName>Model Container</TemplateName>
-              <ThemeName />
-              <UseCustomTemplate>false</UseCustomTemplate>
               <PartialTemplates />
               <Parameters>
                 <Parameter>
@@ -2120,9 +2083,7 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
             </ReportView>
           </Views>
           <ModelGUID>1a89c9ae-46e4-4ba2-b23b-266fdb8d39de</ModelGUID>
-          <TemplateName>Model HTML</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
+          <TemplateName>Model</TemplateName>
           <PartialTemplates />
           <Parameters />
           <CultureName />
@@ -2134,54 +2095,15 @@ AND [1d754267-0c1a-4628-afcb-fa67844a24d8]</Restriction>
       </Views>
       <ModelGUID />
       <TemplateName>Report</TemplateName>
-      <ThemeName />
-      <UseCustomTemplate>false</UseCustomTemplate>
       <PartialTemplates />
       <Parameters>
         <Parameter>
           <Name>container_fluid</Name>
           <Value>True</Value>
         </Parameter>
-        <Parameter>
-          <Name>child_container_fluid</Name>
-          <Value>True</Value>
-        </Parameter>
       </Parameters>
       <CultureName />
       <SortOrder>1</SortOrder>
-      <WebExec>true</WebExec>
-      <PdfConfigurations />
-      <ExcelConfigurations />
-    </ReportView>
-    <ReportView>
-      <GUID>ca0f8a2d-9935-4690-86eb-bb1f7ad622b8</GUID>
-      <Name>CSV</Name>
-      <Views>
-        <ReportView>
-          <GUID>82ec1246-4d6f-4dcc-af40-ebb1a44aff80</GUID>
-          <Name>Model CSV Excel</Name>
-          <Views />
-          <ModelGUID>bff6defa-3e89-4bfa-b2d0-08f01a0282af</ModelGUID>
-          <TemplateName>Model CSV Excel</TemplateName>
-          <ThemeName />
-          <UseCustomTemplate>false</UseCustomTemplate>
-          <PartialTemplates />
-          <Parameters />
-          <CultureName />
-          <SortOrder>1</SortOrder>
-          <WebExec>true</WebExec>
-          <PdfConfigurations />
-          <ExcelConfigurations />
-        </ReportView>
-      </Views>
-      <ModelGUID />
-      <TemplateName>Report</TemplateName>
-      <ThemeName />
-      <UseCustomTemplate>false</UseCustomTemplate>
-      <PartialTemplates />
-      <Parameters />
-      <CultureName />
-      <SortOrder>2</SortOrder>
       <WebExec>true</WebExec>
       <PdfConfigurations />
       <ExcelConfigurations />

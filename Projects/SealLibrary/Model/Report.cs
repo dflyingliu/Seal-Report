@@ -139,9 +139,6 @@ namespace Seal.Model
         public string ResultFilePath;
 
         [XmlIgnore]
-        public string FinalResultFilePath; //If set, the file is used as external file
-
-        [XmlIgnore]
         public string DisplayResultFilePath
         {
             get
@@ -612,6 +609,16 @@ namespace Seal.Model
         public bool HasPlotlyChart
         {
             get { return Models.Exists(i => i.HasPlotlySerie); }
+        }
+
+        [XmlIgnore]
+        public Encoding ResultFileEncoding
+        {
+            get
+            {
+                //Utf8 by default, except for CSV if specified
+                return (Format == ReportFormat.csv && !ExecutionView.GetBoolValue(Parameter.CSVUtf8Parameter)) ? Encoding.Default : Encoding.UTF8;
+            }
         }
 
         public void InitReferences()
@@ -1323,7 +1330,7 @@ namespace Seal.Model
         {
             get
             {
-                return Format == ReportFormat.pdf || Format == ReportFormat.excel || Format == ReportFormat.csv;
+                return Format == ReportFormat.pdf || Format == ReportFormat.excel || Format == ReportFormat.csv || Format == ReportFormat.custom;
             }
         }
 

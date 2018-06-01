@@ -14,6 +14,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net.Mail;
 using Microsoft.Win32.TaskScheduler;
+using System.Text;
 
 namespace Seal.Model
 {
@@ -94,6 +95,10 @@ namespace Seal.Model
             {
                 //use the children to render in a new extension file
                 result = Report.ExecutionView.ParseChildren();
+                if (Report.Format == ReportFormat.custom && !File.Exists(Report.ResultFilePath))
+                {
+                    File.WriteAllText(Report.ResultFilePath, "Error using Custom format: Report.ResultFilePath must be set in a custom view script.", Encoding.UTF8);
+                }
             }
             else
             {
@@ -103,7 +108,7 @@ namespace Seal.Model
 
             try
             {
-                File.WriteAllText(Report.ResultFilePath, result.Trim(), System.Text.Encoding.UTF8);
+                if (Report.Format != ReportFormat.custom) File.WriteAllText(Report.ResultFilePath, result.Trim(), Report.ResultFileEncoding);
             }
             catch (Exception ex)
             {
@@ -112,7 +117,7 @@ namespace Seal.Model
                 string newPath = FileHelper.GetUniqueFileName(Path.Combine(newFolder, Report.ResultFileName), "." + Report.ResultExtension);
                 Report.ExecutionErrors += string.Format("Unable to write to '{0}'.\r\nChanging report result to '{1}'.\r\n{2}\r\n", Report.ResultFilePath, newPath, ex.Message);
                 Report.ResultFilePath = newPath;
-                File.WriteAllText(Report.ResultFilePath, result.Trim(), System.Text.Encoding.UTF8);
+                File.WriteAllText(Report.ResultFilePath, result.Trim(), Report.ResultFileEncoding);
             }
 
             if (Report.Format == ReportFormat.pdf)
@@ -153,11 +158,6 @@ namespace Seal.Model
                     Report.ExecutionErrors = ex.Message;
                 }
             }
-            else if (!string.IsNullOrEmpty(Report.FinalResultFilePath) && File.Exists(Report.FinalResultFilePath))
-            {
-                Report.ResultFilePath = Report.FinalResultFilePath;
-            }
-
         }
 
 
@@ -171,7 +171,7 @@ namespace Seal.Model
             }
             string result = Render();
             Debug.WriteLine(string.Format("RenderHTMLDisplay {0} {1} {2}", Report.HTMLDisplayFilePath, Report.Status, Report.ExecutionGUID));
-            File.WriteAllText(Report.HTMLDisplayFilePath, result, System.Text.Encoding.UTF8);
+            File.WriteAllText(Report.HTMLDisplayFilePath, result, Encoding.UTF8);
         }
 
         public void RenderHTMLDisplayForViewer()
@@ -179,7 +179,7 @@ namespace Seal.Model
             string result = Render();
             Debug.WriteLine(string.Format("RenderHTMLDisplayForViewer {0} {1} {2}", Report.HTMLDisplayFilePath, Report.Status, Report.ExecutionGUID));
 
-            File.WriteAllText(Report.HTMLDisplayFilePath, result, System.Text.Encoding.UTF8);
+            File.WriteAllText(Report.HTMLDisplayFilePath, result, Encoding.UTF8);
         }
 
 
@@ -798,7 +798,7 @@ namespace Seal.Model
                 ResultCell[] line;
 
                 //First line, only if column values
-                if (headerColumnValues.Length > 0)
+                if (headerColumnValues.Length > 0 && model.ShowFirstLine)
                 {
                     line = new ResultCell[width];
                     if (headerDataValues.Length == 1) line[0] = headerDataValues[0]; //Case 1 Data, title in first cell
@@ -1133,7 +1133,7 @@ namespace Seal.Model
                     if (!line0[i].IsTotal)
                     {
                         //empty cell
-                        tttLine[i] = new ResultTotalCell() { Element = line0[i].Element, IsTotal = true, Value = (i == 0 ? Report.Translate("Total") : "") };
+                        tttLine[i] = new ResultTotalCell() { Element = line0[i].Element, IsTotal = true, IsTitle = true, Value = (i == 0 ? Report.Translate("Total") : "") };
                     }
                     else
                     {
@@ -1218,6 +1218,7 @@ namespace Seal.Model
                     if (Report.Cancel) break;
 
                     ResultTable dataTable = page.DataTable;
+                    if (dataTable.BodyStartRow == dataTable.BodyEndRow) continue;
 
                     ResultTotalCell[] subTotalLine = null;
                     List<ResultTotalCell> totalCells = new List<ResultTotalCell>();
@@ -1375,6 +1376,7 @@ namespace Seal.Model
 
         private void initialSort(ReportModel model)
         {
+            model.UpdateFinalSortOrders();
             foreach (var page in model.Pages)
             {
                 //If we have rows and columns ...
@@ -1750,7 +1752,7 @@ namespace Seal.Model
                 if (paginationParameter != null) paginationParameter.BoolValue = false;
                 Report.Status = ReportStatus.RenderingResult;
                 string result = Render();
-                File.WriteAllText(newPath, result.Trim(), System.Text.Encoding.UTF8);
+                File.WriteAllText(newPath, result.Trim(), Encoding.UTF8);
             }
             finally
             {
@@ -1773,7 +1775,7 @@ namespace Seal.Model
                 Report.Format = ReportFormat.csv;
                 Report.Status = ReportStatus.RenderingResult;
                 string result = Report.ExecutionView.ParseChildren();
-                File.WriteAllText(newPath, result.Trim(), System.Text.Encoding.UTF8);
+                File.WriteAllText(newPath, result.Trim(), Report.ResultFileEncoding);
             }
             finally
             {
@@ -1795,7 +1797,7 @@ namespace Seal.Model
                 Report.Format = ReportFormat.print;
                 Report.Status = ReportStatus.RenderingResult;
                 string result = Render();
-                File.WriteAllText(newPath, result.Trim(), System.Text.Encoding.UTF8);
+                File.WriteAllText(newPath, result.Trim(), Encoding.UTF8);
             }
             finally
             {
