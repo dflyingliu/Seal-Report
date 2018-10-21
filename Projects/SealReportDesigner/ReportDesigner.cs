@@ -8,21 +8,14 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
-using System.Text;
 using System.Windows.Forms;
-using System.Data.OleDb;
 using Seal.Model;
 using System.IO;
 using Seal.Controls;
 using Seal.Helpers;
-using Seal.Converter;
 using Seal.Forms;
 using System.Diagnostics;
-using RazorEngine.Templating;
 using System.Collections;
-using System.ComponentModel.Design;
-using System.Drawing.Design;
-using System.Reflection;
 using Microsoft.Win32.TaskScheduler;
 
 namespace Seal
@@ -231,7 +224,8 @@ namespace Seal
                 mainTreeView.Nodes.Add(tasksTN);
                 foreach (var task in _report.Tasks)
                 {
-                    TreeNode taskTN = new TreeNode(task.Name) { Tag = task, ImageIndex = 12, SelectedImageIndex = 12 };
+                    var imageIndex = task.Enabled ? 12 : 14;
+                    TreeNode taskTN = new TreeNode(task.Name) { Tag = task, ImageIndex = imageIndex, SelectedImageIndex = imageIndex };
                     tasksTN.Nodes.Add(taskTN);
                 }
                 tasksTN.Expand();
@@ -458,6 +452,7 @@ namespace Seal
             }
             if (_reportViewer != null && _reportViewer.Visible) _reportViewer.Close();
             toolsHelper.Report = _report;
+            TemplateTextEditor.CurrentEntity = _report;
             _report.SchedulesWithCurrentUser = Properties.Settings.Default.SchedulesWithCurrentUser;
         }
 
@@ -477,6 +472,7 @@ namespace Seal
                 selectAfterLoad();
 
                 toolsHelper.Report = _report;
+                TemplateTextEditor.CurrentEntity = _report;
                 _report.SchedulesWithCurrentUser = Properties.Settings.Default.SchedulesWithCurrentUser;
 
                 if (!string.IsNullOrEmpty(_report.ExecutionErrors)) MessageBox.Show(_report.ExecutionErrors, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -532,6 +528,7 @@ namespace Seal
             IsModified = false;
             init();
             toolsHelper.Report = _report;
+            TemplateTextEditor.CurrentEntity = _report;
         }
 
         private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
@@ -778,14 +775,14 @@ namespace Seal
             treeContextMenuStrip.Items.Add(ts);
         }
 
-        void addExecuteRenderContextItem(string name)
+        void addExecuteRenderContextItem(string name, string name2 = "")
         {
             if (executeToolStripMenuItem.Enabled)
             {
                 ToolStripMenuItem ts = new ToolStripMenuItem();
                 ts.Click += new System.EventHandler(this.executeToolStripMenuItem_Click);
                 ts.Tag = false;
-                ts.Text = "Execute " + Helper.QuoteSingle(name);
+                ts.Text = "Execute " + Helper.QuoteSingle(name) + name2;
                 if (treeContextMenuStrip.Items.Count > 0) treeContextMenuStrip.Items.Add(new ToolStripSeparator());
                 treeContextMenuStrip.Items.Add(ts);
                 if (renderToolStripMenuItem.Enabled)
@@ -873,6 +870,7 @@ namespace Seal
                 addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
                 addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
                 addSmartCopyItem("Smart copy...", entity);
+                if (((ReportTask)entity).Enabled) addExecuteRenderContextItem(((RootComponent)entity).Name, " (this task only)");
             }
             else if (entity is ReportOutput)
             {
@@ -992,7 +990,6 @@ namespace Seal
                 MetaSource metaSource = MetaSource.Create(_repository);
                 metaSource.IsNoSQL = source.IsNoSQL;
                 metaSource.InitScript = source.InitScript;
-                metaSource.TasksScript = source.TasksScript;
                 metaSource.Connections.Clear();
                 metaSource.Connections.AddRange(source.Connections);
                 metaSource.MetaData.Joins.AddRange(source.MetaData.Joins);
@@ -1232,10 +1229,14 @@ namespace Seal
             }
 
             bool render = (sender == renderToolStripButton || sender == renderToolStripMenuItem || sender == renderViewOutputToolStripButton || sender == renderViewOutputToolStripMenuItem);
-            string viewGUID = null, outputGUID = null;
+            string viewGUID = null, outputGUID = null, taskGUID = null;
             if (sender == renderViewOutputToolStripMenuItem || sender == executeViewOutputToolStripMenuItem || sender == renderViewOutputToolStripButton || sender == executeViewOutputToolStripButton)
             {
-                if (selectedEntity is ReportOutput)
+                if (selectedEntity is ReportTask)
+                {
+                    taskGUID = ((ReportTask)selectedEntity).GUID;
+                }
+                else if (selectedEntity is ReportOutput)
                 {
                     outputGUID = ((ReportOutput)selectedEntity).GUID;
                 }
@@ -1247,10 +1248,10 @@ namespace Seal
                     viewGUID = (node.Tag as ReportView).GUID;
                 }
             }
-            ExecuteReport(render, viewGUID, outputGUID);
+            ExecuteReport(render, viewGUID, outputGUID, taskGUID);
         }
 
-        public void ExecuteReport(bool render, string viewGUID, string outputGUID)
+        public void ExecuteReport(bool render, string viewGUID, string outputGUID, string taskGUID)
         {
             //commit panels
             if (selectedEntity is ReportModel) modelPanel.Commit();
@@ -1279,7 +1280,7 @@ namespace Seal
             {
                 _reportViewer = new ReportViewerForm(false, Properties.Settings.Default.ShowScriptErrors);
             }
-            _reportViewer.ViewReport(_report.Clone(), _repository, render, viewGUID, outputGUID, _report.FilePath);
+            _reportViewer.ViewReport(_report.Clone(), _repository, render, viewGUID, outputGUID, _report.FilePath, taskGUID);
             _canRender = true;
             FileHelper.PurgeTempApplicationDirectory();
         }

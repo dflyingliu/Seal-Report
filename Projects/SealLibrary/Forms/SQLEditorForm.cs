@@ -12,6 +12,7 @@ using System.Text;
 using System.Windows.Forms;
 using Seal.Helpers;
 using Seal.Model;
+using ScintillaNET;
 
 namespace Seal.Forms
 {
@@ -29,8 +30,7 @@ namespace Seal.Forms
         public SQLEditorForm()
         {
             InitializeComponent();
-            sqlTextBox.ConfigurationManager.Language = "mssql";
-            sqlTextBox.EndOfLine.Mode = ScintillaNET.EndOfLineMode.Crlf;
+            ScintillaHelper.Init(sqlTextBox, Lexer.Sql);
             toolStripStatusLabel.Image = null;
 
             ShowIcon = true;
@@ -38,6 +38,7 @@ namespace Seal.Forms
 
             this.Load += SQLEditorForm_Load;
             this.FormClosed += SQLEditorForm_FormClosed;
+            this.FormClosing += SQLEditorForm_FormClosing;
             this.sqlTextBox.KeyDown += TextBox_KeyDown;
             this.KeyDown += TextBox_KeyDown;
         }
@@ -46,7 +47,7 @@ namespace Seal.Forms
         {
             if (LastSize != null) Size = LastSize.Value;
             if (LastLocation != null) Location = LastLocation.Value;
-            sqlTextBox.Modified = false;
+            sqlTextBox.SetSavePoint();
         }
 
         bool CheckClose()
@@ -69,9 +70,17 @@ namespace Seal.Forms
             LastLocation = Location;
         }
 
+        private void SQLEditorForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (!CheckClose())
+            {
+                e.Cancel = true;
+            }
+        }
+
         public void SetReadOnly()
         {
-            sqlTextBox.IsReadOnly = true;
+            sqlTextBox.ReadOnly = true;
             okToolStripButton.Visible = false;
             cancelToolStripButton.Text = "Close";
             clearToolStripButton.Visible = false;
@@ -84,6 +93,7 @@ namespace Seal.Forms
         {
             if (CheckClose())
             {
+                sqlTextBox.SetSavePoint();
                 DialogResult = DialogResult.Cancel;
                 Close();
             }
@@ -91,6 +101,7 @@ namespace Seal.Forms
 
         private void okToolStripButton_Click(object sender, EventArgs e)
         {
+            sqlTextBox.SetSavePoint();
             DialogResult = DialogResult.OK;
             Close();
         }
@@ -152,7 +163,7 @@ namespace Seal.Forms
                         try
                         {
                             table.CheckTable(null);
-                            if (sqlTextBox.IsReadOnly) table.SetReadOnly();
+                            if (sqlTextBox.ReadOnly) table.SetReadOnly();
                             error = table.Error;
                         }
                         finally
@@ -176,7 +187,7 @@ namespace Seal.Forms
                     {
                         join.Clause = sqlTextBox.Text;
                         join.CheckJoin();
-                        if (sqlTextBox.IsReadOnly) join.SetReadOnly();
+                        if (sqlTextBox.ReadOnly) join.SetReadOnly();
                         error = join.Error;
                     }
                     finally

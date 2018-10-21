@@ -48,7 +48,7 @@ namespace Seal.Model
                 PdfConverter.InitEditor();
 
                 GetProperty("ExcelConverter").SetIsBrowsable(true);
-                ExcelConverter.InitEditor(); 
+                ExcelConverter.InitEditor();
 
                 GetProperty("WebExec").SetIsBrowsable(Template.Name == ReportViewTemplate.ReportName);
 
@@ -763,6 +763,11 @@ namespace Seal.Model
                 }
                 phase = "executing";
                 result = RazorHelper.CompileExecute(ViewTemplateText, Report, key);
+
+                //For CSV, add just one new line
+                if (Report.Format == ReportFormat.csv) {
+                    result = result.Trim() + "\r\n" + (result.EndsWith("\r\n") ? "\r\n" : "");
+                }
             }
             catch (Exception ex)
             {
@@ -861,7 +866,7 @@ namespace Seal.Model
                     }
                     else
                     {
-                        result.Add(dimensions, dimensions[0].ValueNoHTML);
+                        result.Add(dimensions, dimensions[0].DisplayValue);
                     }
                 }
                 else result.Add(dimensions, Helper.ConcatCellValues(dimensions, ","));

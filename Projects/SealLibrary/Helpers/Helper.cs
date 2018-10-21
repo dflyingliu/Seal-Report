@@ -103,7 +103,7 @@ namespace Seal.Helpers
         static public string ConcatCellValues(ResultCell[] cells, string separator)
         {
             string result = "";
-            foreach (var cell in cells) Helper.AddValue(ref result, separator, cell.ValueNoHTML);
+            foreach (var cell in cells) Helper.AddValue(ref result, separator, cell.DisplayValue);
             return result;
         }
 
@@ -246,7 +246,7 @@ namespace Seal.Helpers
 
         static public ColumnType NetTypeConverter(Type netType)
         {
-            if (netType == typeof(string)) return ColumnType.Text;
+            if (netType == typeof(string) || netType== typeof(Guid)) return ColumnType.Text;
             if (netType == typeof(DateTime)) return ColumnType.DateTime;
             return ColumnType.Numeric;
         }

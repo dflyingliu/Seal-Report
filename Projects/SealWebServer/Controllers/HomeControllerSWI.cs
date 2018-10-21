@@ -26,7 +26,7 @@ namespace SealWebServer.Controllers
             WriteDebug("SWILogin");
             try
             {
-                if (WebUser == null || !WebUser.IsAuthenticated || WebUser.WebUserName != user)
+                if (WebUser == null || !WebUser.IsAuthenticated || (!string.IsNullOrEmpty(user) && WebUser.WebUserName != user))
                 {
                     CreateRepository();
                     CreateWebUser();
@@ -328,7 +328,7 @@ namespace SealWebServer.Controllers
 
                 var execution = initReportExecution(report, viewGUID, outputGUID, true);
                 execution.Execute();
-                while (report.Status != ReportStatus.Executed) System.Threading.Thread.Sleep(100);
+                while (report.Status != ReportStatus.Executed && !report.HasErrors) Thread.Sleep(100);
 
                 ActionResult result = null;
                 if (!string.IsNullOrEmpty(outputGUID))

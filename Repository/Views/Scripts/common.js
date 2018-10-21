@@ -65,11 +65,28 @@ function initNavMenu() {
     }
 }
 
+
+function setMessageHeight() {
+    if (!printLayout) {
+        setTimeout(function () {
+            var offset = $("#progress_panel").height() + $("#alert_status").height() + $("#restrictions_div").height() + 110;
+            var height = (Math.max(document.documentElement.clientHeight, window.innerHeight || 0) - offset);
+            $("#execution_messages").css("height", height + "px");
+        }, 100);
+    }
+}
+
 function scrollMessages() {
     var $messages = $("#execution_messages");
+    setMessageHeight();
     if ($messages && $messages[0] && $messages[0].scrollHeight) {
         setTimeout(function () { $messages.scrollTop($messages[0].scrollHeight); }, 200);
     }
+}
+
+function resize() {
+    if (!printLayout) $("body").css("padding-top", $("#bar_top").height() + 15);
+    setMessageHeight();
 }
 
 function showNavMenu() {
@@ -127,6 +144,8 @@ function showPopupNavMenu(source, content, forChart) {
             left: (forChart ? source.clientX + document.body.scrollLeft + document.documentElement.scrollLeft: source.offset().left),
             top: (forChart ? source.clientY + document.body.scrollTop + document.documentElement.scrollTop: source.offset().top + source.height() + 3)
         });
+
+    setTimeout(function () { $popup.hide(); }, 3000);
 }
 
 
@@ -234,6 +253,8 @@ function executeReport(nav) {
     $('#restrictions_div select').selectpicker('refresh');
     $('.view').css("display", "none");
     $("#nav_button").attr("disabled", "disabled");
+
+    setMessageHeight();
 }
 
 function submitViewParameter(viewId, parameterName, parameterValue) {
@@ -254,7 +275,7 @@ function submitViewParameter(viewId, parameterName, parameterValue) {
 
 function getTableData(datatable, guid, viewid, pageid, data, callback, settings) {
     try {
-        var params = data.draw + "§" + settings.aaSorting + "§" + settings.oPreviousSearch.sSearch + "§" + settings._iDisplayLength + "§" + settings._iDisplayStart
+        var params = data.draw + "§" + settings.aaSorting + "§" + settings.oPreviousSearch.sSearch.replace("<", "&lt;").replace(">", "&gt;") + "§" + settings._iDisplayLength + "§" + settings._iDisplayStart
         if (urlPrefix != "") {
             $.post(urlPrefix + "ActionGetTableData", { execution_guid: guid, viewid: viewid, pageid: pageid, parameters: params })
                 .done(function (data) {
@@ -284,11 +305,6 @@ function getTableData(datatable, guid, viewid, pageid, data, callback, settings)
         datatable[0].innerHTML = "Error loading data..." + "<br>" + ex2.message;
     }
 }
-
-function resize() {
-    if (!printLayout) $("body").css("padding-top", $("#bar_top").height() + 15);
-}
-
 
 function mainInit() {
     //force execute
@@ -439,7 +455,7 @@ $(document).ready(function () {
         }, 800);
         return false;
     });
-    $('#back-to-top').tooltip('show');
+    if (!printLayout) $('#back-to-top').tooltip('show');
     scrollMessages();
 
     $("#main_container").css("display", "block");

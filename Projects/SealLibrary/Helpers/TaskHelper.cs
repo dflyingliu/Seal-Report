@@ -165,7 +165,7 @@ namespace Seal.Helpers
             }
         }
 
-        public bool LoadTableFromCSV(string loadFolder, string sourceCsvPath, string destinationTableName, char? separator=null, bool useAllConnections = false, bool useVBParser = false)
+        public bool LoadTableFromCSV(string loadFolder, string sourceCsvPath, string destinationTableName, char? separator = null, bool useAllConnections = false, bool useVBParser = true)
         {
             bool result = false;
             try
@@ -188,7 +188,7 @@ namespace Seal.Helpers
             return result;
         }
 
-        public void LoadTableFromCSV(string sourceCsvPath, string destinationTableName, char? separator = null, bool useAllConnections = false, bool useVBParser = false) 
+        public void LoadTableFromCSV(string sourceCsvPath, string destinationTableName, char? separator = null, bool useAllConnections = false, bool useVBParser = false)
         {
             try
             {
@@ -349,10 +349,37 @@ namespace Seal.Helpers
             return null;
         }
 
-        public void ExecuteMSSQLScripts(string scriptsDirectory, bool useAllConnections = false)
+        #region MSSQL
+
+        bool hasStartCommentAtTheEnd(string text)
         {
+            int open = text.LastIndexOf("/*");
+            int close = text.LastIndexOf("*/");
+            if (open >= 0) return (open > close);
+            return false;
+        }
+
+        bool hasEndCommentAtTheBeginning(string text)
+        {
+            int open = text.IndexOf("/*");
+            int close = text.IndexOf("*/");
+            if (close >= 0)
+            {
+                if (open > 0) return (close < open);
+                else return true;
+            }
+            return false;
+        }
+
+        string _mssqlError = "";
+        int _mssqlErrorClassLevel = 11;
+        public void ExecuteMSSQLScripts(string scriptsDirectory, bool useAllConnections = false, bool stopOnError = true, int errorClassLevel = 11)
+        {
+            _mssqlError = "";
+            _mssqlErrorClassLevel = errorClassLevel;
+
             var files = Directory.GetFiles(scriptsDirectory, "*.sql");
-             foreach (var file in files.OrderBy(i => i))
+            foreach (var file in files.OrderBy(i => i))
             {
                 LogMessage("Processing file '{0}'", file);
                 foreach (var connection in _task.Source.Connections.Where(i => useAllConnections || i.GUID == _task.Connection.GUID))
@@ -360,28 +387,83 @@ namespace Seal.Helpers
                     if (_task.CancelReport) break;
 
                     SqlConnection conn = new SqlConnection(connection.SQLServerConnectionString);
-                    conn.FireInfoMessageEventOnUserErrors = true;
-                    conn.InfoMessage += MSSQLConnection_InfoMessage;
-                    conn.Open();
-                    string script = File.ReadAllText(file);
-                    // split script on GO command
-                    IEnumerable<string> commandStrings = Regex.Split(script, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-                    foreach (string commandString in commandStrings)
+                    try
                     {
-                        if (!string.IsNullOrEmpty(commandString.Trim()))
+                        conn.FireInfoMessageEventOnUserErrors = true;
+                        conn.InfoMessage += MSSQLConnection_InfoMessage;
+                        conn.Open();
+                        string script = File.ReadAllText(file);
+                        // split script on GO command
+                        IEnumerable<string> commandStrings = Regex.Split(script, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+                        List<string> commands = new List<string>();
+                        string startCmd = "";
+                        bool inComment = false;
+                        foreach (string commandString in commandStrings)
                         {
-                            DateTime startCommand = DateTime.Now;
-                            using (var command = new SqlCommand("", conn))
+                            if (!string.IsNullOrEmpty(commandString.Trim()))
                             {
-                                command.CommandTimeout = 0;
-                                command.CommandText = commandString;
-                                command.ExecuteNonQuery();
+                                if (!inComment)
+                                {
+                                    if (hasStartCommentAtTheEnd(commandString))
+                                    {
+                                        //start of comment
+                                        inComment = true;
+                                        startCmd = commandString + "GO";
+                                    }
+                                    else
+                                    {
+                                        //normal case
+                                        commands.Add(startCmd + commandString);
+                                        inComment = false;
+                                        startCmd = "";
+                                    }
+
+                                }
+                                else
+                                {
+                                    //in comment
+                                    if (!hasEndCommentAtTheBeginning(commandString))
+                                    {
+                                        //no end of comment
+                                        startCmd += commandString + "GO";
+                                    }
+                                    else if (hasEndCommentAtTheBeginning(commandString) && hasStartCommentAtTheEnd(commandString))
+                                    {
+                                        //end of comment, but start again
+                                        startCmd += commandString + "GO";
+                                    }
+                                    else
+                                    {
+                                        //end of comment
+                                        commands.Add(startCmd + commandString);
+                                        inComment = false;
+                                        startCmd = "";
+                                    }
+                                }
                             }
-                            Thread.Sleep(200);
                         }
+                    
+                        foreach (string commandString in commands)
+                        {
+                            if (!string.IsNullOrEmpty(commandString.Trim()))
+                            {
+                                DateTime startCommand = DateTime.Now;
+                                using (var command = new SqlCommand("", conn))
+                                {
+                                    command.CommandTimeout = 0;
+                                    command.CommandText = commandString;
+                                    command.ExecuteNonQuery();
+                                }
+                                Thread.Sleep(200);
+                                if (!string.IsNullOrEmpty(_mssqlError) && stopOnError) throw new Exception(_mssqlError);
+                            }
+                        }
+                        Thread.Sleep(500);
                     }
-                    Thread.Sleep(500);
-                    conn.Close();
+                    finally
+                    {
+                        conn.Close();
+                    }
                 }
             }
 
@@ -391,9 +473,20 @@ namespace Seal.Helpers
 
         void MSSQLConnection_InfoMessage(object sender, SqlInfoMessageEventArgs e)
         {
+            foreach(SqlError err in e.Errors)
+            {
+                if (err.Class >= _mssqlErrorClassLevel)
+                {
+                    _mssqlError = e.Message;
+                    break;
+                }
+            }
             LogMessage(e.Message);
             Thread.Sleep(20);
         }
+
+#endregion
+
 
         //SANDBOX !
         //Just use this to code, compile and debug your Razor Script within Visual Studio...
@@ -409,7 +502,7 @@ namespace Seal.Helpers
             table.Columns.Add(new DataColumn("Categories", typeof(string)));
 
             var task = this._task;
-        	TaskHelper helper = this;
+            TaskHelper helper = this;
             ReportExecutionLog log = task.Report;
             //Just replace helper.DesignMyRazorScript(); with the code below            
 
@@ -418,7 +511,7 @@ namespace Seal.Helpers
             var feed = System.ServiceModel.Syndication.SyndicationFeed.Load(reader);
             foreach (var item in feed.Items)
             {
-                string link = item.Links.Count >0 ? item.Links[0].Uri.AbsoluteUri : "";
+                string link = item.Links.Count > 0 ? item.Links[0].Uri.AbsoluteUri : "";
                 string categories = "";
                 foreach (var category in item.Categories)
                 {
@@ -428,7 +521,7 @@ namespace Seal.Helpers
             }
 
 
-            foreach(var path in File.ReadAllLines(@"c:\temp\test.sql"))
+            foreach (var path in File.ReadAllLines(@"c:\temp\test.sql"))
             {
                 var newPath = path.Replace("@", "").Replace("\"", "").Replace(";", "");
                 var command = task.GetDbCommand(task.Connection);

@@ -4,24 +4,19 @@
 //
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using Seal.Model;
-using RazorEngine;
 using RazorEngine.Templating;
 using Seal.Helpers;
+using ScintillaNET;
 
 namespace Seal.Forms
 {
     public partial class TemplateTextEditorForm : Form
     {
-        public ReportView View;
-        public Type TypeForCheckSyntax = null;
-        public string TextToAddForCheck = "";
+        public object ObjectForCheckSyntax = null;
+        public string ScriptHeader = null;
 
         ToolStripMenuItem samplesMenuItem = new ToolStripMenuItem("Samples...");
 
@@ -31,13 +26,13 @@ namespace Seal.Forms
         public TemplateTextEditorForm()
         {
             InitializeComponent();
-            textBox.ConfigurationManager.Language = "html";
-            textBox.EndOfLine.Mode = ScintillaNET.EndOfLineMode.Crlf;
+            ScintillaHelper.Init(textBox, Lexer.Html);
             toolStripStatusLabel.Image = null;
             ShowIcon = true;
             Icon = Repository.ProductIcon;
 
             this.Load += TemplateTextEditorForm_Load;
+            this.FormClosing += TemplateTextEditorForm_FormClosing;
             this.FormClosed += TemplateTextEditorForm_FormClosed;
             this.textBox.KeyDown += TextBox_KeyDown;
             this.KeyDown += TextBox_KeyDown;
@@ -61,7 +56,7 @@ namespace Seal.Forms
         {
             if (LastSize != null) Size = LastSize.Value;
             if (LastLocation != null) Location = LastLocation.Value;
-            textBox.Modified = false;
+            textBox.SetSavePoint();
         }
 
         void TemplateTextEditorForm_FormClosed(object sender, FormClosedEventArgs e)
@@ -70,10 +65,20 @@ namespace Seal.Forms
             LastLocation = Location;
         }
 
+        private void TemplateTextEditorForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (!CheckClose())
+            {
+                e.Cancel = true;
+            }
+        }
+
+
         private void cancelToolStripButton_Click(object sender, EventArgs e)
         {
             if (CheckClose())
             {
+                textBox.SetSavePoint();
                 DialogResult = DialogResult.Cancel;
                 Close();
             }
@@ -86,7 +91,17 @@ namespace Seal.Forms
 
         private void okToolStripButton_Click(object sender, EventArgs e)
         {
-            DialogResult = DialogResult.OK;
+            if (textBox.Modified && ObjectForCheckSyntax != null)
+            {
+                var error = checkSyntax();
+                if (!string.IsNullOrEmpty(error))
+                {
+                    if (MessageBox.Show("The Razor syntax is incorrect. Do you really want to save this script and exit ?", "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.Cancel) return;
+                }
+            } 
+
+            DialogResult = textBox.Modified ? DialogResult.OK : DialogResult.Cancel;
+            textBox.SetSavePoint();
             Close();
         }
 
@@ -98,14 +113,16 @@ namespace Seal.Forms
             toolStripStatusLabel.Image = null;
         }
 
-        private void checkSyntaxToolStripButton_Click(object sender, EventArgs e)
+        private string checkSyntax()
         {
             string error = "";
             try
             {
                 string script = textBox.Text;
-                if (!string.IsNullOrEmpty(TextToAddForCheck)) script += "\r\n" + TextToAddForCheck;
-                RazorHelper.Compile(script, TypeForCheckSyntax, Guid.NewGuid().ToString());
+                string scriptHeader = ScriptHeader;
+                if (scriptHeader == null) scriptHeader = RazorHelper.GetScriptHeader(ObjectForCheckSyntax);
+                if (!string.IsNullOrEmpty(scriptHeader)) script += "\r\n" + scriptHeader;
+                RazorHelper.Compile(script, ObjectForCheckSyntax.GetType(), Guid.NewGuid().ToString());
             }
             catch (TemplateCompilationException ex)
             {
@@ -123,13 +140,22 @@ namespace Seal.Forms
             {
                 toolStripStatusLabel.Text = "Compilation error";
                 toolStripStatusLabel.Image = global::Seal.Properties.Resources.error2;
-
-                MessageBox.Show(error, "Check syntax", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             else
             {
                 toolStripStatusLabel.Text = "Razor Syntax is OK";
                 toolStripStatusLabel.Image = global::Seal.Properties.Resources.checkedGreen;
+            }
+
+            return error;
+        }
+
+        private void checkSyntaxToolStripButton_Click(object sender, EventArgs e)
+        {
+            string error = checkSyntax();
+            if (!string.IsNullOrEmpty(error))
+            {
+                MessageBox.Show(error, "Check syntax", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

@@ -434,5 +434,4 @@ namespace Seal.Model
         [Description("Log in one file per execution")]
         OneFilePerExecution,
     }
-
 }

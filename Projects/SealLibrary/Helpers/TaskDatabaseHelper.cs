@@ -35,8 +35,10 @@ namespace Seal.Helpers
         public string InsertStartCommand = "";
         public string InsertEndCommand = "";
         public int ColumnCharLength = 0; //0= means auto size
+        public int NoRowsCharLength = 50; //Char length taken if the table loaded as no row
         public int LoadBurstSize = 0; //0 = Load all records in one
         public string LoadSortColumn = ""; //Sort column used if LoadBurstSize is specified
+        public bool UseDbDataAdapter = false;
         public int InsertBurstSize = 500;
         public string ExcelOdbcDriver = "Driver={{Microsoft Excel Driver (*.xls, *.xlsx, *.xlsm, *.xlsb)}};DBQ={0}";
         public Encoding DefaultEncoding = Encoding.Default;
@@ -97,13 +99,58 @@ namespace Seal.Helpers
             if (MyLoadDataTable != null) return MyLoadDataTable(connectionString, sql);
 
             DataTable table = new DataTable();
-            DbDataAdapter adapter = null;
-            var connection = Helper.DbConnectionFromConnectionString(connectionString);
-            connection.Open();
-            if (connection is OdbcConnection) adapter = new OdbcDataAdapter(sql, (OdbcConnection)connection);
-            else adapter = new OleDbDataAdapter(sql, (OleDbConnection)connection);
-            adapter.SelectCommand.CommandTimeout = SelectTimeout;
-            adapter.Fill(table);
+
+            if (UseDbDataAdapter)
+            {
+                DbDataAdapter adapter = null;
+                var connection = Helper.DbConnectionFromConnectionString(connectionString);
+                connection.Open();
+                if (connection is OdbcConnection) adapter = new OdbcDataAdapter(sql, (OdbcConnection)connection);
+                else adapter = new OleDbDataAdapter(sql, (OleDbConnection)connection);
+                adapter.SelectCommand.CommandTimeout = SelectTimeout;
+                adapter.Fill(table);
+            }
+            else
+            {
+                DbCommand cmd = new OdbcCommand();
+                var connection = Helper.DbConnectionFromConnectionString(connectionString);
+                connection.Open();
+                if (connection is OdbcConnection) cmd = new OdbcCommand(sql, (OdbcConnection)connection);
+                else cmd = new OleDbCommand(sql, (OleDbConnection)connection);
+                cmd.CommandTimeout = 0;
+                cmd.CommandType = CommandType.Text;
+                DbDataReader dr = cmd.ExecuteReader();
+                DataTable schemaTable = dr.GetSchemaTable();
+                foreach (DataRow dataRow in schemaTable.Rows)
+                {
+                    DataColumn dataColumn = new DataColumn();
+                    dataColumn.ColumnName = dataRow["ColumnName"].ToString();
+                    dataColumn.DataType = Type.GetType(dataRow["DataType"].ToString());
+                    dataColumn.ReadOnly = (bool)dataRow["IsReadOnly"];
+                    dataColumn.AutoIncrement = (bool)dataRow["IsAutoIncrement"];
+                    dataColumn.Unique = (bool)dataRow["IsUnique"];
+
+                    for (int i = 0; i < table.Columns.Count; i++)
+                    {
+                        if (dataColumn.ColumnName == table.Columns[i].ColumnName)
+                        {
+                            dataColumn.ColumnName += "_" + table.Columns.Count.ToString();
+                        }
+                    }
+                    table.Columns.Add(dataColumn);
+                }
+
+                while (dr.Read())
+                {
+                    DataRow dataRow = table.NewRow();
+                    for (int i = 0; i < table.Columns.Count; i++)
+                    {
+                        dataRow[i] = dr[i];
+                    }
+                    table.Rows.Add(dataRow);
+                }
+            }
+
             return table;
         }
 
@@ -465,6 +512,8 @@ namespace Seal.Helpers
                     {
                         if (row[col].ToString().Length > len) len = row[col].ToString().Length + 1;
                     }
+
+                    if (col.Table.Rows.Count == 0) len = NoRowsCharLength;
                 }
                 if (ColumnCharLength <= 0 && DatabaseType == DatabaseType.MSSQLServer && len > 8000)
                     result.AppendFormat("{0}(max)", Helper.IfNullOrEmpty(ColumnCharType, _defaultColumnCharType));

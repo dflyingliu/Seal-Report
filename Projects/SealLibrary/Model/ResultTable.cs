@@ -6,6 +6,7 @@ using Seal.Converter;
 using Seal.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -30,7 +31,7 @@ namespace Seal.Model
         public string GetLoadTableData(ReportView view, string parameter)
         {
             var model = view.Model;
-            var parameters = parameter.Split('§');
+            var parameters = parameter.Replace("&lt;", "<").Replace("&gt;",">").Split('§');
 
             int echo = 1, len = 50, start = 0;
             string sort = "", search = "";
@@ -181,6 +182,29 @@ namespace Seal.Model
         public bool IsSubTotalRow(int row)
         {
             return (row < RowCount && ColumnCount > 0 && Lines[row][0].IsSubTotal);
+        }
+
+        public DataTable GetDataTable()
+        {
+            var result = new DataTable();
+            if (RowCount > 0)
+            {
+                for (int col = 0; col < ColumnCount; col++)
+                {
+                    result.Columns.Add(this[0, col].DisplayValue);
+                }
+
+                for (int row = 1; row < RowCount; row++)
+                {
+                    var values = new List<string>();
+                    for (int col = 0; col < ColumnCount; col++)
+                    {
+                        values.Add(this[row, col].DisplayValue);
+                    }
+                    result.Rows.Add(values.ToArray());
+                }
+            }
+            return result;
         }
     }
 

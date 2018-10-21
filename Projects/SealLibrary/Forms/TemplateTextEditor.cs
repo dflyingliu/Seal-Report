@@ -12,11 +12,15 @@ using System.Windows.Forms.Design;
 using System.Windows.Forms;
 using Seal.Model;
 using System.IO;
+using Seal.Helpers;
+using ScintillaNET;
 
 namespace Seal.Forms
 {
     public class TemplateTextEditor : UITypeEditor
     {
+        public static object CurrentEntity = null; //Hack to get the current entity
+
         const string razorPreOutputTemplate = "@using Seal.Model\r\n@{\r\nReportOutput output = Model;\r\nstring result = \"1\"; //Set result to 0 to cancel the report.\r\n}\r\n@Raw(result)";
         const string razorPostOutputTemplate = "@using Seal.Model\r\n@{\r\nReportOutput output = Model;\r\n}";
         const string displayNameTemplate = "@using Seal.Model\r\n@{\r\nReport report = Model;\r\nstring result = System.IO.Path.GetFileNameWithoutExtension(report.FilePath) + \" \" + DateTime.Now.ToShortDateString();\r\n}\r\n@Raw(result)";
@@ -293,7 +297,7 @@ namespace Seal.Forms
 
         const string razorTasksTemplate = @"@using System.Text
 @functions {
-    //During execution, this script will be copied at the end of all task scripts...
+    //Before execution, this script will be added at the end of all task scripts...
     public string MyConvertString(string input) {
         return input.Replace(""__"",""_"");
     }
@@ -349,7 +353,7 @@ namespace Seal.Forms
 @{
     MetaSource source = Model;
 	ReportExecutionLog log = null;
-    Report = null;
+    Report report = null;
     if (source is ReportSource) {
         log = ((ReportSource) source).Report;
         report = ((ReportSource) source).Report;
@@ -416,7 +420,7 @@ namespace Seal.Forms
         ""DestinationTableName"", //destination table name
         null, //optional CSV separator (e.g. ',') 
         false, //optional, if true, the table is loaded for all connections defined in the Source
-        false //optional, if true, the MS Visual Basic Parser is used (can be used if values contain new line characters) 
+        true //optional, if true, the MS Visual Basic Parser is used (to be used if values contain new line characters) otherwise the standard parser is used
     );
 "
                 ),
@@ -475,7 +479,9 @@ namespace Seal.Forms
     var helper = new TaskHelper(task);
 	helper.ExecuteMSSQLScripts(
         @""scriptsDirectory"",
-        false //if true, the scripts are executed for all connections defined in the Source
+        false, //if true, the scripts are executed for all connections defined in the Source
+        true, //if false, the execution continues even if an error occurs
+        11 //error class level to consider an error versus information/warning
     );
 "
                 ),
@@ -493,6 +499,7 @@ namespace Seal.Forms
 	dbHelper.InsertBurstSize = 500; //number of insert per SQL command when inserting records in the destination table
 	dbHelper.LoadBurstSize = 0; //number of records to load from the table (to be used with LoadSortColumn), 0 means to load all records in one query, otherwise several queries are performed
 	dbHelper.LoadSortColumn = """"; //name of the column used to sort if LoadBurstSize is specified, 
+    dbHelper.UseDbDataAdapter = false; //If true, the DbDataAdapter.Fill() is used instead of the DataReader
 	dbHelper.ExcelOdbcDriver = ""Driver={{Microsoft Excel Driver (*.xls, *.xlsx, *.xlsm, *.xlsb)}}; DBQ={0}""; //Excel ODBC Driver used to load table from Excel
 	dbHelper.DefaultEncoding = Encoding.Default; //encoding used to read the CSV file 
 	dbHelper.TrimText = true; //if true, all texts are trimmed when inserted in the destination table
@@ -513,22 +520,15 @@ namespace Seal.Forms
     dbHelper.MyGetTableCreateCommand = new CustomGetTableCreateCommand(delegate(DataTable table) {
         //return RootGetTableCreateCommand(table);
         //Root implementation may be the following...
-        if (dbHelper.DatabaseType == DatabaseType.MSSQLServer)
+        StringBuilder result = new StringBuilder();
+        foreach (DataColumn col in table.Columns)
         {
-            return dbHelper.MSSQLCreateTABLECommand(dbHelper.CleanName(table.TableName), table);
+            if (result.Length > 0) result.Append(',');
+            result.AppendFormat(""{0} "", dbHelper.GetTableColumnName(col));
+            result.Append(dbHelper.GetTableColumnType(col));
+            result.Append("" NULL"");
         }
-        else
-        {
-            StringBuilder result = new StringBuilder();
-            foreach (DataColumn col in table.Columns)
-            {
-                if (result.Length > 0) result.Append(',');
-                result.AppendFormat(""{0} "", dbHelper.GetTableColumnName(col));
-                result.Append(dbHelper.GetTableColumnType(col));
-                result.Append("" NULL"");
-            }
-            return string.Format(""CREATE TABLE {0} ({1})"", dbHelper.CleanName(table.TableName), result);
-        }
+        return string.Format(""CREATE TABLE {0} ({1})"", dbHelper.CleanName(table.TableName), result);
     });
 
     dbHelper.MyGetTableColumnNames = new CustomGetTableColumnNames(delegate(DataTable table) {
@@ -551,6 +551,7 @@ namespace Seal.Forms
     });
 
     dbHelper.MyGetTableColumnType = new CustomGetTableColumnType(delegate(DataColumn col) {
+        //if (col.ColumnName==""aColName"") return ""bigint""; 
         return dbHelper.RootGetTableColumnType(col);
     });
 
@@ -617,42 +618,40 @@ namespace Seal.Forms
                 string valueToEdit = (value == null ? "" : value.ToString());
                 if (context.Instance is ReportView)
                 {
-                    frm.View = context.Instance as ReportView;
+                    var view = context.Instance as ReportView;
                     if (context.PropertyDescriptor.Name == "CustomTemplate")
                     {
-                        if (string.IsNullOrEmpty(valueToEdit)) valueToEdit = frm.View.ViewTemplateText;
-                        template = frm.View.Template.Text.Trim();
+                        if (string.IsNullOrEmpty(valueToEdit)) valueToEdit = view.ViewTemplateText;
+                        template = view.Template.Text.Trim();
                         frm.Text = "Edit custom template";
-                        frm.TypeForCheckSyntax = typeof(Report);
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        frm.ObjectForCheckSyntax = view.Report;
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "CustomConfiguration")
                     {
-                        if (string.IsNullOrEmpty(valueToEdit)) valueToEdit = frm.View.Template.Configuration;
-                        template = frm.View.Template.Configuration.Trim();
+                        if (string.IsNullOrEmpty(valueToEdit)) valueToEdit = view.Template.Configuration;
+                        template = view.Template.Configuration.Trim();
                         frm.Text = "Edit template configuration";
-                        frm.TypeForCheckSyntax = typeof(ReportViewTemplate);
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        frm.ObjectForCheckSyntax = view.Template;
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }
                 else if (context.Instance is ReportViewPartialTemplate)
                 {
                     var pt = context.Instance as ReportViewPartialTemplate;
-                    frm.View = pt.View;
-                    var templateText = frm.View.Template.GetPartialTemplateText(pt.Name);
+                    var templateText = pt.View.Template.GetPartialTemplateText(pt.Name);
                     if (string.IsNullOrEmpty(valueToEdit)) valueToEdit = templateText;
                     template = templateText;
                     frm.Text = "Edit custom partial template";
-                    frm.TypeForCheckSyntax = frm.View.Template.ForReportModel ? typeof(ReportModel) : typeof(ReportView);
-                    frm.textBox.ConfigurationManager.Language = "cs";
+                    frm.ObjectForCheckSyntax = pt.View.Template.ForReportModel ? (object)pt.View.Model : (object)pt.View;
+                    ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                 }
                 else if (context.Instance is ReportTask)
                 {
                     template = razorTaskTemplate;
-                    frm.TypeForCheckSyntax = typeof(ReportTask);
+                    frm.ObjectForCheckSyntax = context.Instance;
                     frm.Text = "Edit task script";
-                    frm.textBox.ConfigurationManager.Language = "cs";
-                    frm.TextToAddForCheck = ((ReportTask)context.Instance).ScriptHeader;
+                    ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     List<string> samples = new List<string>();
                     foreach (var sample in tasksSamples)
                     {
@@ -664,9 +663,9 @@ namespace Seal.Forms
                 {
                     if (context.PropertyDescriptor.Name == "PreScript") template = razorPreOutputTemplate;
                     else if (context.PropertyDescriptor.Name == "PostScript") template = razorPostOutputTemplate;
-                    frm.TypeForCheckSyntax = typeof(ReportOutput);
+                    frm.ObjectForCheckSyntax = context.Instance;
                     frm.Text = "Edit output script";
-                    frm.textBox.ConfigurationManager.Language = "cs";
+                    ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                 }
                 else if (context.Instance is Parameter || context.Instance is ParametersEditor)
                 {
@@ -675,39 +674,39 @@ namespace Seal.Forms
                     {
                         template = parameter.ConfigValue;
                         frm.Text = parameter.DisplayName;
-                        frm.textBox.ConfigurationManager.Language = (string.IsNullOrEmpty(parameter.EditorLanguage) ? "" : parameter.EditorLanguage);
+                        ScintillaHelper.Init(frm.textBox, (string.IsNullOrEmpty(parameter.EditorLanguage) ? "" : parameter.EditorLanguage));
                         if (parameter.TextSamples != null) frm.SetSamples(parameter.TextSamples.ToList());
                     }
                 }
                 else if (context.Instance.GetType().ToString() == "SealPdfConverter.PdfConverter")
                 {
                     string language = "cs";
-                    SealPdfConverter converter = SealPdfConverter.Create("");
+                    SealPdfConverter converter = (SealPdfConverter)context.Instance;
                     converter.ConfigureTemplateEditor(frm, context.PropertyDescriptor.Name, ref template, ref language);
-                    frm.textBox.ConfigurationManager.Language = language;
+                    ScintillaHelper.Init(frm.textBox, language);
                 }
                 else if (context.Instance.GetType().ToString() == "SealExcelConverter.ExcelConverter")
                 {
                     string language = "cs";
-                    SealExcelConverter converter = SealExcelConverter.Create("");
+                    SealExcelConverter converter = (SealExcelConverter)context.Instance;
                     converter.ConfigureTemplateEditor(frm, context.PropertyDescriptor.Name, ref template, ref language);
-                    frm.textBox.ConfigurationManager.Language = language;
+                    ScintillaHelper.Init(frm.textBox, language);
                 }
                 else if (context.Instance is ViewFolder)
                 {
                     if (context.PropertyDescriptor.Name == "DisplayName")
                     {
                         template = displayNameTemplate;
-                        frm.TypeForCheckSyntax = typeof(Report);
+                        frm.ObjectForCheckSyntax = ((ReportComponent)context.Instance).Report;
                         frm.Text = "Edit display name script";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "InitScript")
                     {
                         template = razorInitScriptTemplate;
-                        frm.TypeForCheckSyntax = typeof(Report);
+                        frm.ObjectForCheckSyntax = ((ReportComponent)context.Instance).Report;
                         frm.Text = "Edit the script executed when the report is initialized";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }
                 else if (context.Instance is ReportElement)
@@ -724,24 +723,24 @@ namespace Seal.Forms
                         }
                         frm.SetSamples(samples);
 
-                        frm.TypeForCheckSyntax = typeof(ResultCell);
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        frm.ObjectForCheckSyntax = new ResultCell();
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "SQL")
                     {
                         frm.Text = "Edit custom SQL";
-                        frm.textBox.ConfigurationManager.Language = "sql";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Sql);
                         template = element.RawSQLColumn;
                         List<string> samples = new List<string>();
                         samples.Add(element.RawSQLColumn);
                         if (!string.IsNullOrEmpty(element.SQL) && !samples.Contains(element.SQL)) samples.Add(element.SQL);
                         frm.SetSamples(samples);
-                        frm.textBox.LineWrapping.Mode = ScintillaNET.LineWrappingMode.Word;
+                        frm.textBox.WrapMode = WrapMode.Word;
                     }
                     else if (context.PropertyDescriptor.Name == "CellCss")
                     {
                         frm.Text = "Edit custom CSS";
-                        frm.textBox.ConfigurationManager.Language = "css";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Css);
                         List<string> samples = new List<string>();
                         samples.Add("text-align:right;");
                         samples.Add("text-align:center;");
@@ -751,7 +750,7 @@ namespace Seal.Forms
                         samples.Add("color:green;text-align:right;|color:black;|font-weight:bold;color:red;text-align:right;");
                         samples.Add("white-space: nowrap;");
                         frm.SetSamples(samples);
-                        frm.textBox.LineWrapping.Mode = ScintillaNET.LineWrappingMode.Word;
+                        frm.textBox.WrapMode = WrapMode.Word;
                     }
                 }
                 else if (context.Instance is MetaColumn)
@@ -759,8 +758,8 @@ namespace Seal.Forms
                     if (context.PropertyDescriptor.Name == "Name")
                     {
                         frm.Text = "Edit column name";
-                        frm.textBox.ConfigurationManager.Language = "sql";
-                        frm.textBox.LineWrapping.Mode = ScintillaNET.LineWrappingMode.Word;
+                        ScintillaHelper.Init(frm.textBox, Lexer.Sql);
+                        frm.textBox.WrapMode = WrapMode.Word;
                     }
                 }
                 else if (context.Instance is SealSecurity)
@@ -768,9 +767,9 @@ namespace Seal.Forms
                     if (context.PropertyDescriptor.Name == "Script" || context.PropertyDescriptor.Name == "ProviderScript")
                     {
                         template = ((SealSecurity)context.Instance).ProviderScript;
-                        frm.TypeForCheckSyntax = typeof(SecurityUser);
+                        frm.ObjectForCheckSyntax = new SecurityUser(null);
                         frm.Text = "Edit security script";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }
                 else if (context.Instance is MetaTable)
@@ -778,16 +777,16 @@ namespace Seal.Forms
                     if (context.PropertyDescriptor.Name == "DefinitionScript")
                     {
                         template = razorTableDefinitionScriptTemplate;
-                        frm.TypeForCheckSyntax = typeof(MetaTable);
+                        frm.ObjectForCheckSyntax = context.Instance;
                         frm.Text = "Edit the script to define the table";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "LoadScript")
                     {
                         template = razorTableLoadScriptTemplate;
-                        frm.TypeForCheckSyntax = typeof(MetaTable);
+                        frm.ObjectForCheckSyntax = context.Instance;
                         frm.Text = "Edit the default script to load the table";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }
                 else if (context.Instance is ReportModel)
@@ -795,16 +794,16 @@ namespace Seal.Forms
                     if (context.PropertyDescriptor.Name == "PreLoadScript")
                     {
                         template = razorModelPreLoadScriptTemplateNoSQL;
-                        frm.TypeForCheckSyntax = typeof(ReportModel);
+                        frm.ObjectForCheckSyntax = context.Instance;
                         frm.Text = "Edit the script executed before table load";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "FinalScript")
                     {
                         template = razorTableFinalScriptTemplate;
-                        frm.TypeForCheckSyntax = typeof(ReportModel);
+                        frm.ObjectForCheckSyntax = context.Instance;
                         frm.Text = "Edit the final script executed for the model";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "LoadScript")
                     {
@@ -818,47 +817,78 @@ namespace Seal.Forms
                             frm.Text = "Edit the script to load the table";
                             template = razorModelLoadScriptTemplate;
                         }
-                        frm.TypeForCheckSyntax = typeof(ReportModel);
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        frm.ObjectForCheckSyntax = context.Instance;
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }
                 else if (context.Instance is MetaSource && context.PropertyDescriptor.Name == "InitScript")
                 {
                     template = razorSourceInitScriptTemplate;
-                    frm.TypeForCheckSyntax = typeof(MetaSource);
+                    frm.ObjectForCheckSyntax = context.Instance;
                     frm.Text = "Edit the init script of the source";
-                    frm.textBox.ConfigurationManager.Language = "cs";
+                    ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                 }
-                else if ((context.Instance is TasksFolder || context.Instance is MetaSource) && context.PropertyDescriptor.Name == "TasksScript")
+                else if (context.Instance is TasksFolder)
                 {
-                    template = razorTasksTemplate;
-                    frm.TextToAddForCheck = ((ReportComponent)context.Instance).Report.Repository.Configuration.TasksScript + "\r\n";
-                    frm.TypeForCheckSyntax = typeof(ReportTask);
-                    frm.Text = "Edit the script that will be added to all task scripts";
-                    frm.textBox.ConfigurationManager.Language = "cs";
+                    if (context.PropertyDescriptor.Name == "TasksScript")
+                    {
+                        template = razorTasksTemplate;
+                        frm.ObjectForCheckSyntax = new ReportTask();
+                        if (CurrentEntity is Report)
+                        {
+                            frm.ScriptHeader = ((Report)CurrentEntity).Repository.Configuration.CommonScriptsHeader;
+                            frm.ScriptHeader += ((Report)CurrentEntity).Repository.Configuration.TasksScript;
+                            frm.ScriptHeader += ((Report)CurrentEntity).CommonScriptsHeader;
+                        }
+                        frm.Text = "Edit the script that will be added to all task scripts";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
+                    }
+                }
+                else if (context.Instance is CommonScript)
+                {
+                    template = CommonScript.RazorTemplate;
+                    frm.Text = "Edit the script that will be added to all scripts executed for the report.";
+                    if (CurrentEntity is SealServerConfiguration)
+                    {
+                        //common script from configuration
+                        frm.ScriptHeader = ((SealServerConfiguration)CurrentEntity).GetCommonScriptsHeader((CommonScript)context.Instance);
+                    }
+                    if (CurrentEntity is Report)
+                    {
+                        //common script from report
+                        frm.ScriptHeader = ((Report)CurrentEntity).Repository.Configuration.CommonScriptsHeader;
+                        frm.ScriptHeader += ((Report)CurrentEntity).GetCommonScriptsHeader((CommonScript)context.Instance);
+
+                    }
+                    frm.ObjectForCheckSyntax = CurrentEntity;
+                    ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                 }
                 else if (context.Instance is SealServerConfiguration)
                 {
+                    //use report tag to store current config
+                    var report = new Report();
+                    report.Tag = context.Instance;
                     if (context.PropertyDescriptor.Name == "InitScript")
                     {
                         template = razorConfigurationInitScriptTemplate;
-                        frm.TypeForCheckSyntax = typeof(Report);
+                        frm.ObjectForCheckSyntax = report;
                         frm.Text = "Edit the root init script";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "TasksScript")
                     {
                         template = razorTasksTemplate;
-                        frm.TypeForCheckSyntax = typeof(ReportTask);
+                        frm.ScriptHeader = ((SealServerConfiguration)context.Instance).CommonScriptsHeader;
+                        frm.ObjectForCheckSyntax = new ReportTask();
                         frm.Text = "Edit the script that will be added to all task scripts";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "ReportCreationScript")
                     {
                         template = razorConfigurationReportCreationScriptTemplate;
-                        frm.TypeForCheckSyntax = typeof(Report);
+                        frm.ObjectForCheckSyntax = report;
                         frm.Text = "Edit the script executed when a new report is created";
-                        frm.textBox.ConfigurationManager.Language = "cs";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }
 
@@ -874,11 +904,11 @@ namespace Seal.Forms
 
                 if (context.PropertyDescriptor.IsReadOnly)
                 {
-                    frm.textBox.IsReadOnly = true;
+                    frm.textBox.ReadOnly = true;
                     frm.okToolStripButton.Visible = false;
                     frm.cancelToolStripButton.Text = "Close";
                 }
-                frm.checkSyntaxToolStripButton.Visible = (frm.TypeForCheckSyntax != null);
+                frm.checkSyntaxToolStripButton.Visible = (frm.ObjectForCheckSyntax != null);
 
                 if (svc.ShowDialog(frm) == DialogResult.OK)
                 {

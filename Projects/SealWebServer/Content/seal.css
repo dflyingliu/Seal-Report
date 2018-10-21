@@ -1,11 +1,16 @@
-body { /* navbar-fixed-top */
+body {
     min-height: 400px;
 }
 
 @media screen {
     #execution_messages {
-        max-height: 400px;
         overflow-y: auto;
+        min-height: 180px;
+    }
+
+    #alert_status .alert {
+        overflow-y: auto;
+        max-height: 600px;
     }
 }
 
@@ -41,7 +46,7 @@ body { /* navbar-fixed-top */
         border-width: 0 !important;
     }
 
-    .navbar-toggle, .navbar-nav {
+    .navbar-toggle, .navbar-nav, #back-to-top {
         display: none;
     }
 }

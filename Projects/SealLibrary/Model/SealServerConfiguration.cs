@@ -4,21 +4,15 @@
 //
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Xml.Serialization;
-using System.Data.OleDb;
-using System.Data;
 using System.ComponentModel;
 using Seal.Converter;
 using System.Drawing.Design;
-using System.ComponentModel.Design;
 using System.IO;
-using Seal.Helpers;
-using System.Text.RegularExpressions;
 using Seal.Forms;
 using DynamicTypeDescriptor;
 using System.Windows.Forms.Design;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace Seal.Model
@@ -51,9 +45,11 @@ namespace Seal.Model
                 GetProperty("DateTimeFormat").SetIsBrowsable(!ForPublication);
                 GetProperty("InitScript").SetIsBrowsable(!ForPublication);
                 GetProperty("TasksScript").SetIsBrowsable(!ForPublication);
+                GetProperty("CommonScripts").SetIsBrowsable(!ForPublication);
+                //GetProperty("CommonScripts").SetDisplayName("Common Scripts: " + (_commonScripts.Count == 0 ? "None" : _commonScripts.Count.ToString() + " Items(s)"));
                 GetProperty("ReportCreationScript").SetIsBrowsable(!ForPublication);
                 GetProperty("IsLocal").SetIsBrowsable(!ForPublication);
-
+                
                 GetProperty("WebApplicationPoolName").SetIsBrowsable(ForPublication);
                 GetProperty("WebApplicationName").SetIsBrowsable(ForPublication);
                 GetProperty("WebPublicationDirectory").SetIsBrowsable(ForPublication);
@@ -85,12 +81,21 @@ namespace Seal.Model
         }
 
         string _logoName = "logo.png";
-        [Category("Server Settings"), DisplayName("Logo file name"), Description("The logo file name used by the report templates. The file must be located in the Repository folder '<Repository Path>\\Views\\Images'."), Id(5, 1)]
+        [Category("Server Settings"), DisplayName("Logo file name"), Description("The logo file name used by the report templates. The file must be located in the Repository folder '<Repository Path>\\Views\\Images'. If empty, the Web Product Name is used as prefix."), Id(5, 1)]
         [DefaultValue("logo.png")]
         public string LogoName
         {
             get { return _logoName; }
             set { _logoName = value; }
+        }
+
+        [XmlIgnore]
+        public bool HasLogo
+        {
+            get {
+                if (string.IsNullOrEmpty(LogoName)) return false;
+                return File.Exists(Path.Combine(Repository.ViewImagesFolder, LogoName));
+            }
         }
 
         int _logDays = 30;
@@ -145,6 +150,33 @@ namespace Seal.Model
         {
             get { return _tasksScript; }
             set { _tasksScript = value; }
+        }
+
+        List<CommonScript> _commonScripts = new List<CommonScript>();
+        [Category("Scripts"), DisplayName("Common Scripts"), Description("List of scripts added to all scripts executed during a report execution (not only for tasks). This may be useful to defined common functions for the report."), Id(7, 3)]
+        [Editor(typeof(EntityCollectionEditor), typeof(UITypeEditor))]
+        public List<CommonScript> CommonScripts
+        {
+            get { return _commonScripts; }
+            set { _commonScripts = value; }
+        }
+
+        [XmlIgnore]
+        public string CommonScriptsHeader
+        {
+            get
+            {
+                var result = "";
+                foreach (var script in CommonScripts) result += script.Script + "\r\n";
+                return result;
+            }
+        }
+
+        public string GetCommonScriptsHeader(CommonScript scriptBeingEdited)
+        {
+            var result = "";
+            foreach (var script in CommonScripts.Where(i => i != scriptBeingEdited)) result += script.Script + "\r\n";
+            return result;
         }
 
 

@@ -3,9 +3,11 @@
   <DefaultConnectionString>Provider=SQLOLEDB;data source=localhost;initial catalog=adb;Integrated Security=SSPI;</DefaultConnectionString>
   <TaskFolderName>Seal Report</TaskFolderName>
   <WebProductName>Seal Report</WebProductName>
+  <IsLocal>true</IsLocal>
   <InitScript />
   <ReportCreationScript />
   <TasksScript />
+  <CommonScripts />
   <DefaultCulture />
   <CsvSeparator />
   <WebApplicationPoolName>Seal Application Pool</WebApplicationPoolName>
