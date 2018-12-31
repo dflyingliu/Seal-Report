@@ -19,7 +19,7 @@ function callbackHandler(data, callback, errorcb) {
 function failure() {
     SWIUtil.ShowMessage("alert-danger", _errorServer, 0);
 }
-var SWIGateway = /** @class */ (function () {
+var SWIGateway = (function () {
     function SWIGateway() {
         this._execForm = null;
     }

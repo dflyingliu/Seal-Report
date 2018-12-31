@@ -564,7 +564,9 @@ namespace Seal.Model
 
             Report.LogMessage("Executing report tasks...");
 
-            var tasks = Report.Tasks.Where(i => i.Enabled).ToList();
+            var tasks = Report.ExecutionTasks;
+            foreach (var task in tasks) task.Progression = 0;
+
             //Temp list to avoid dynamic changes during the task
             foreach (var task in tasks.OrderBy(i => i.SortOrder))
             {
@@ -707,7 +709,7 @@ namespace Seal.Model
                 if (createPage)
                 {
                     //Build new page
-                    currentPage = new ResultPage() { Report = Report };
+                    currentPage = new ResultPage() { Report = Report, Model = model };
                     //Create Page table
                     currentPage.Pages = pageValues;
                     model.Pages.Add(currentPage);
@@ -756,7 +758,7 @@ namespace Seal.Model
 
             if (model.Pages.Count == 0)
             {
-                model.Pages.Add(new ResultPage() { Report = Report });
+                model.Pages.Add(new ResultPage() { Report = Report, Model = model });
 
             }
         }

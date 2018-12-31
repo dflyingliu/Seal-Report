@@ -17,7 +17,7 @@ $(document).ready(function () {
     _main = new SWIMain();
     _main.Process();
 });
-var SWIMain = /** @class */ (function () {
+var SWIMain = (function () {
     function SWIMain() {
         this._connected = false;
         this._profile = null;
