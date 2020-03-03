@@ -1,23 +1,16 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using System.Diagnostics;
 using Seal.Model;
 using System.IO;
 using Seal.Helpers;
-using RazorEngine.Templating;
-using System.Threading;
 using System.Web;
-using System.Globalization;
 
 namespace Seal.Forms
 {
@@ -67,6 +60,19 @@ namespace Seal.Forms
             }
         }
 
+        SealInterface _interface = null;
+        SealInterface Interface
+        {
+            get
+            {
+                if (_interface == null)
+                {
+                    _interface = SealInterface.Create(Repository.Instance);
+                }
+                return _interface;
+            }
+        }
+
         string GetFormValue(string id)
         {
             string result = "";
@@ -92,7 +98,10 @@ namespace Seal.Forms
         {
             Show();
             Text = Path.GetFileNameWithoutExtension(originalFilePath) + " - " + Repository.SealRootProductName + " Report Viewer";
+            WindowState = FormWindowState.Normal;
             BringToFront();
+            TopLevel = true;
+            Focus();
 
             Report previousReport = _report;
 
@@ -282,13 +291,37 @@ namespace Seal.Forms
 
                     case ReportExecution.ActionNavigate:
                         string nav = webBrowser.Document.All[ReportExecution.HtmlId_navigation_id].GetAttribute("value");
-                        _execution = _navigation.Navigate(nav, _execution.RootReport);
-                        _report = _execution.Report;
+                        var parameters = HttpUtility.ParseQueryString(webBrowser.Document.All[ReportExecution.HtmlId_navigation_parameters].GetAttribute("value"));
 
-                        _canRender = false;
-                        cancelNavigation = true;
-                        _reportDone = false;
-                        Execute();
+                        if (nav.StartsWith(NavigationLink.FileDownloadPrefix)) //File download
+                        {
+                            var filePath = _navigation.NavigateScript(nav, _execution.Report, parameters);
+                            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+                            {
+                                Process.Start(filePath);
+                            }
+                            else
+                            {
+                                throw new Exception(string.Format("Invalid file path got from the navigation script: '{0}'", filePath));
+                            }
+                            cancelNavigation = true;
+                        }
+                        else if (nav.StartsWith(NavigationLink.ReportScriptPrefix)) //Report Script
+                        {
+                            HtmlElement dataload = webBrowser.Document.All["navigation_result"];
+                            dataload.InnerText = _navigation.NavigateScript(nav, _execution.Report, parameters);
+                            cancelNavigation = true;
+                        }
+                        else //Drill or SubReport
+                        {
+                            _execution = _navigation.Navigate(nav, _execution.RootReport);
+                            _report = _execution.Report;
+
+                            _canRender = false;
+                            cancelNavigation = true;
+                            _reportDone = false;
+                            Execute();
+                        }
                         break;
 
                     case ReportExecution.ActionGetNavigationLinks:
@@ -307,9 +340,9 @@ namespace Seal.Forms
                             string pageid = webBrowser.Document.All[ReportExecution.HtmlId_pageid_tableload].GetAttribute("value");
                             HtmlElement dataload = webBrowser.Document.All[ReportExecution.HtmlId_parameter_tableload];
                             var view = report.ExecutionView.GetView(viewid);
-                            if (view != null && view.Model != null)
+                            if (view != null && view.ModelView != null)
                             {
-                                var page = view.Model.Pages.FirstOrDefault(i => i.PageId == pageid);
+                                var page = view.ModelView.Model.Pages.FirstOrDefault(i => i.PageId == pageid);
                                 if (page != null)
                                 {
                                     dataload.InnerText = page.DataTable.GetLoadTableData(view, dataload.InnerText);
@@ -317,12 +350,42 @@ namespace Seal.Forms
                             }
                         }
                         break;
+
+                    case ReportExecution.ActionUpdateEnumValues:
+                        {
+                            cancelNavigation = true;
+                            string enumId = webBrowser.Document.All[ReportExecution.HtmlId_id_enumload].GetAttribute("value");
+                            string values = webBrowser.Document.All[ReportExecution.HtmlId_values_enumload].GetAttribute("value");
+                            _execution.UpdateEnumValues(enumId, values);
+                        }
+                        break;
+
+                    case ReportExecution.ActionGetEnumValues:
+                        {
+                            cancelNavigation = true;
+                            string enumId = webBrowser.Document.All[ReportExecution.HtmlId_id_enumload].GetAttribute("value");
+                            string filter = webBrowser.Document.All[ReportExecution.HtmlId_filter_enumload].GetAttribute("value");
+                            HtmlElement enumValues = webBrowser.Document.All[ReportExecution.HtmlId_parameter_enumload];
+                            enumValues.InnerText = _execution.GetEnumValues(enumId, filter);
+                        }
+                        break;
+
+                    default:
+                        {
+                            if (Interface.ProcessAction(action, webBrowser, _navigation))
+                            {
+                                cancelNavigation = true;
+                            }
+                            break;
+                        }
                 }
             }
             catch (Exception ex)
             {
                 cancelNavigation = true;
-                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                var message = ex.Message;
+                if (ex.InnerException != null) message += "\r\n" + ex.InnerException.Message;
+                MessageBox.Show(message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             return cancelNavigation;
         }

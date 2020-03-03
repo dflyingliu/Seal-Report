@@ -1,14 +1,10 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using Seal.Helpers;
 using Seal.Model;
@@ -21,6 +17,9 @@ namespace Seal.Forms
         public object Instance;
         public string PropertyName;
         public string SqlToCheck = null;
+        public bool WarningOnError = false;
+
+        Dictionary<int, string> _compilationErrors = new Dictionary<int, string>();
 
         static Size? LastSize = null;
         static Point? LastLocation = null;
@@ -47,14 +46,20 @@ namespace Seal.Forms
         {
             if (LastSize != null) Size = LastSize.Value;
             if (LastLocation != null) Location = LastLocation.Value;
+            sqlTextBox.IndicatorClick += SqlTextBox_IndicatorClick;
             sqlTextBox.SetSavePoint();
+        }
+
+        private void SqlTextBox_IndicatorClick(object sender, IndicatorClickEventArgs e)
+        {
+            if (_compilationErrors.ContainsKey(e.Position)) sqlTextBox.CallTipShow(e.Position, _compilationErrors[e.Position]);
         }
 
         bool CheckClose()
         {
             if (sqlTextBox.Modified)
             {
-                if (MessageBox.Show("The text has been modified. Do you really want to exit ?", "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.Cancel) return false;
+                if (MessageBox.Show("The SQL has been modified. Do you really want to exit ?", "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.Cancel) return false;
             }
             return true;
         }
@@ -101,8 +106,17 @@ namespace Seal.Forms
 
         private void okToolStripButton_Click(object sender, EventArgs e)
         {
-            sqlTextBox.SetSavePoint();
+            if (sqlTextBox.Modified && WarningOnError)
+            {
+                checkSQL();
+                if (!string.IsNullOrEmpty(errorTextBox.Text))
+                {
+                    if (MessageBox.Show("The SQL is incorrect. Do you really want to save this SQL and exit ?", "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.Cancel) return;
+                }
+            }
+
             DialogResult = DialogResult.OK;
+            sqlTextBox.SetSavePoint();
             Close();
         }
 
@@ -121,16 +135,19 @@ namespace Seal.Forms
                     ReportModel model = Instance as ReportModel;
                     if (PropertyName == "PreSQL" || PropertyName == "PostSQL")
                     {
+                        if (sqlTextBox.Text.StartsWith("@")) FormHelper.CheckRazorSyntax(sqlTextBox, "", model, _compilationErrors);
                         error = model.Source.CheckSQL(RazorHelper.CompileExecute(sqlTextBox.Text, model), null, model, true);
                     }
                     else
                     {
-                        error = model.Source.CheckSQL(!string.IsNullOrEmpty(SqlToCheck) ? SqlToCheck : sqlTextBox.Text, model.FromTables, model, false);
+                        var sql = !string.IsNullOrEmpty(SqlToCheck) ? SqlToCheck : sqlTextBox.Text;
+                        error = model.Source.CheckSQL(sql, model.FromTables, model, false);
                     }
                 }
                 if (Instance is MetaEnum)
                 {
                     MetaEnum anEnum = Instance as MetaEnum;
+                    if (sqlTextBox.Text.StartsWith("@")) FormHelper.CheckRazorSyntax(sqlTextBox, "", anEnum, _compilationErrors);
                     error = anEnum.Source.CheckSQL(RazorHelper.CompileExecute(sqlTextBox.Text, anEnum), null, null, false);
                 }
                 else if (Instance is MetaSource)
@@ -138,6 +155,7 @@ namespace Seal.Forms
                     MetaSource source = Instance as MetaSource;
                     if (PropertyName == "PreSQL" || PropertyName == "PostSQL")
                     {
+                        if (sqlTextBox.Text.StartsWith("@")) FormHelper.CheckRazorSyntax(sqlTextBox, "", source, _compilationErrors);
                         error = source.CheckSQL(RazorHelper.CompileExecute(sqlTextBox.Text, source), null, null, true);
                     }
                 }
@@ -146,6 +164,7 @@ namespace Seal.Forms
                     MetaTable table = Instance as MetaTable;
                     if (PropertyName == "PreSQL" || PropertyName == "PostSQL")
                     {
+                        if (sqlTextBox.Text.StartsWith("@")) FormHelper.CheckRazorSyntax(sqlTextBox, "", table, _compilationErrors);
                         error = table.Source.CheckSQL(RazorHelper.CompileExecute(sqlTextBox.Text, table), null, null, true);
                     }
                     else
@@ -153,6 +172,7 @@ namespace Seal.Forms
                         if (PropertyName == "WhereSQL")
                         {
                             initialSQL = table.WhereSQL;
+                            if (sqlTextBox.Text.StartsWith("@")) FormHelper.CheckRazorSyntax(sqlTextBox, "", table, _compilationErrors);
                             table.WhereSQL = RazorHelper.CompileExecute(sqlTextBox.Text, table);
                         }
                         else
@@ -198,6 +218,7 @@ namespace Seal.Forms
                 else if (Instance is ReportTask)
                 {
                     ReportTask task = Instance as ReportTask;
+                    if (sqlTextBox.Text.StartsWith("@")) FormHelper.CheckRazorSyntax(sqlTextBox, "", task, _compilationErrors);
                     error = task.Source.CheckSQL(RazorHelper.CompileExecute(sqlTextBox.Text, task), null, null, false);
                 }
             }
@@ -243,7 +264,7 @@ namespace Seal.Forms
                 item.Click += new System.EventHandler(this.item_Click);
                 samplesMenuItem.DropDownItems.Add(item);
             }
-            if (!mainToolStrip.Items.Contains(samplesMenuItem)) mainToolStrip.Items.Add(samplesMenuItem);
+            if (samples.Count > 0 && !mainToolStrip.Items.Contains(samplesMenuItem)) mainToolStrip.Items.Add(samplesMenuItem);
         }
 
         void item_Click(object sender, EventArgs e)

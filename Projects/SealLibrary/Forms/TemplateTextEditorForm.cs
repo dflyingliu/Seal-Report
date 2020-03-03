@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -10,6 +10,9 @@ using Seal.Model;
 using RazorEngine.Templating;
 using Seal.Helpers;
 using ScintillaNET;
+using System.IO;
+using System.Diagnostics;
+using System.Text;
 
 namespace Seal.Forms
 {
@@ -19,9 +22,12 @@ namespace Seal.Forms
         public string ScriptHeader = null;
 
         ToolStripMenuItem samplesMenuItem = new ToolStripMenuItem("Samples...");
+        ToolStripMenuItem samplesMenuItem2 = new ToolStripMenuItem("Samples (Notepad)");
 
         static Size? LastSize = null;
         static Point? LastLocation = null;
+
+        Dictionary<int, string> _compilationErrors = new Dictionary<int, string>();
 
         public TemplateTextEditorForm()
         {
@@ -56,6 +62,7 @@ namespace Seal.Forms
         {
             if (LastSize != null) Size = LastSize.Value;
             if (LastLocation != null) Location = LastLocation.Value;
+            textBox.IndicatorClick += TextBox_IndicatorClick;
             textBox.SetSavePoint();
         }
 
@@ -98,7 +105,7 @@ namespace Seal.Forms
                 {
                     if (MessageBox.Show("The Razor syntax is incorrect. Do you really want to save this script and exit ?", "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.Cancel) return;
                 }
-            } 
+            }
 
             DialogResult = textBox.Modified ? DialogResult.OK : DialogResult.Cancel;
             textBox.SetSavePoint();
@@ -118,22 +125,11 @@ namespace Seal.Forms
             string error = "";
             try
             {
-                string script = textBox.Text;
-                string scriptHeader = ScriptHeader;
-                if (scriptHeader == null) scriptHeader = RazorHelper.GetScriptHeader(ObjectForCheckSyntax);
-                if (!string.IsNullOrEmpty(scriptHeader)) script += "\r\n" + scriptHeader;
-                RazorHelper.Compile(script, ObjectForCheckSyntax.GetType(), Guid.NewGuid().ToString());
-            }
-            catch (TemplateCompilationException ex)
-            {
-                error = string.Format("Compilation error:\r\n{0}", Helper.GetExceptionMessage(ex));
-                if (ex.InnerException != null) error += "\r\n" + ex.InnerException.Message;
-                if (error.ToLower().Contains("are you missing an assembly reference")) error += string.Format("\r\nNote that you can add assemblies to load by copying your .dll files in the Assemblies Repository folder:'{0}'", Repository.Instance.AssembliesFolder);
+                FormHelper.CheckRazorSyntax(textBox, ScriptHeader, ObjectForCheckSyntax, _compilationErrors);
             }
             catch (Exception ex)
             {
-                error = string.Format("Compilation error:\r\n{0}", ex.Message);
-                if (ex.InnerException != null) error += "\r\n" + ex.InnerException.Message;
+                error = ex.Message;
             }
 
             if (!string.IsNullOrEmpty(error))
@@ -149,6 +145,12 @@ namespace Seal.Forms
 
             return error;
         }
+
+        private void TextBox_IndicatorClick(object sender, IndicatorClickEventArgs e)
+        {
+            if (_compilationErrors.ContainsKey(e.Position)) textBox.CallTipShow(e.Position, _compilationErrors[e.Position]);
+        }
+
 
         private void checkSyntaxToolStripButton_Click(object sender, EventArgs e)
         {
@@ -167,21 +169,41 @@ namespace Seal.Forms
                 if (sample.Contains("|"))
                 {
                     var index = sample.LastIndexOf('|');
-                    title = sample.Substring(index+1);
+                    title = sample.Substring(index + 1);
                     value = sample.Substring(0, index);
                 }
                 ToolStripMenuItem item = new ToolStripMenuItem(title);
+                item.ToolTipText = value.Length > 900 ? value.Substring(0, 900) + "..." : value;
                 item.Click += new System.EventHandler(this.item_Click);
                 item.Tag = value;
-                item.ToolTipText = value.Length > 900 ? value.Substring(0,900) + "..." : value;
                 samplesMenuItem.DropDownItems.Add(item);
+
+                ToolStripMenuItem item2 = new ToolStripMenuItem(title);
+                item2.ToolTipText = item.ToolTipText;
+                item2.Click += new System.EventHandler(this.item_Click2);
+                item2.Tag = value;
+                samplesMenuItem2.DropDownItems.Add(item2);
             }
-            if (!mainToolStrip.Items.Contains(samplesMenuItem)) mainToolStrip.Items.Add(samplesMenuItem);
+            if (samples.Count > 0 && !mainToolStrip.Items.Contains(samplesMenuItem)) mainToolStrip.Items.Add(samplesMenuItem);
+            if (samples.Count > 0 && !mainToolStrip.Items.Contains(samplesMenuItem2)) mainToolStrip.Items.Add(samplesMenuItem2);
         }
 
         void item_Click(object sender, EventArgs e)
         {
-            if (sender is ToolStripMenuItem) textBox.Text = ((ToolStripMenuItem) sender).Tag.ToString();
+            if (sender is ToolStripMenuItem)
+            {
+                textBox.Text = ((ToolStripMenuItem)sender).Tag.ToString();
+            }
+        }
+
+        void item_Click2(object sender, EventArgs e)
+        {
+            if (sender is ToolStripMenuItem)
+            {
+                var path = FileHelper.GetTempUniqueFileName("sample.txt");
+                File.WriteAllText(path, ((ToolStripMenuItem)sender).Tag.ToString(), Encoding.UTF8);
+                Process.Start(path);
+            }
         }
 
         public void SetResetText(string resetText)
@@ -189,7 +211,7 @@ namespace Seal.Forms
             if (!string.IsNullOrEmpty(resetText))
             {
                 var resetButton = new ToolStripButton("Reset script");
-                resetButton.Click += new EventHandler(delegate(object sender2, EventArgs e2) { textBox.Text = resetText; });
+                resetButton.Click += new EventHandler(delegate (object sender2, EventArgs e2) { textBox.Text = resetText; });
                 mainToolStrip.Items.Add(resetButton);
             }
         }

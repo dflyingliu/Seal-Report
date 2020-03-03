@@ -1,15 +1,13 @@
-﻿using DynamicTypeDescriptor;
-using Seal.Converter;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
 using Seal.Forms;
-using Seal.Model;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing.Design;
-using System.Dynamic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Seal.Model
 {
@@ -55,7 +53,13 @@ namespace Seal.Model
                     property.SetDescription(parameter.Description);
                     //property.SetCategory(parameter.Category.ToString());
                     property.DefaultValue = parameter.ConfigObject;
-                    property.SetIsBrowsable(true);                    
+                    property.SetIsBrowsable(true);
+                }
+                else
+                {
+#if DEBUG
+                    throw new Exception(string.Format("Parameters overflow for {0}: {1}", prefix, list.Count));
+#endif
                 }
             }
         }
@@ -274,7 +278,36 @@ namespace Seal.Model
             get { return _enums[15].Value; }
             set { _enums[15].Value = value; }
         }
-
+        [TypeConverter(typeof(ViewParameterEnumConverter))]
+        public string e16
+        {
+            get { return _enums[16].Value; }
+            set { _enums[16].Value = value; }
+        }
+        [TypeConverter(typeof(ViewParameterEnumConverter))]
+        public string e17
+        {
+            get { return _enums[17].Value; }
+            set { _enums[17].Value = value; }
+        }
+        [TypeConverter(typeof(ViewParameterEnumConverter))]
+        public string e18
+        {
+            get { return _enums[18].Value; }
+            set { _enums[18].Value = value; }
+        }
+        [TypeConverter(typeof(ViewParameterEnumConverter))]
+        public string e19
+        {
+            get { return _enums[19].Value; }
+            set { _enums[19].Value = value; }
+        }
+        [TypeConverter(typeof(ViewParameterEnumConverter))]
+        public string e20
+        {
+            get { return _enums[20].Value; }
+            set { _enums[20].Value = value; }
+        }
 
         public int n0
         {

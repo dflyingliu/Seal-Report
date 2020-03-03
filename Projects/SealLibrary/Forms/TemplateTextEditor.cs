@@ -1,17 +1,15 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Drawing.Design;
 using System.ComponentModel;
 using System.Windows.Forms.Design;
 using System.Windows.Forms;
 using Seal.Model;
-using System.IO;
 using Seal.Helpers;
 using ScintillaNET;
 
@@ -21,22 +19,38 @@ namespace Seal.Forms
     {
         public static object CurrentEntity = null; //Hack to get the current entity
 
-        const string razorPreOutputTemplate = "@using Seal.Model\r\n@{\r\nReportOutput output = Model;\r\nstring result = \"1\"; //Set result to 0 to cancel the report.\r\n}\r\n@Raw(result)";
-        const string razorPostOutputTemplate = "@using Seal.Model\r\n@{\r\nReportOutput output = Model;\r\n}";
-        const string displayNameTemplate = "@using Seal.Model\r\n@{\r\nReport report = Model;\r\nstring result = System.IO.Path.GetFileNameWithoutExtension(report.FilePath) + \" \" + DateTime.Now.ToShortDateString();\r\n}\r\n@Raw(result)";
+        const string razorPreOutputTemplate = @"@{
+    ReportOutput output = Model;
+    string result = ""1""; //Set result to 0 to cancel the report.
+}
+@Raw(result)";
 
-        const string razorTaskTemplate = @"@using Seal.Model
-@{
+        const string razorPostOutputTemplate = @"@{
+    ReportOutput output = Model;
+}";
+
+        const string displayNameTemplate = @"@{
+    Report report = Model;
+    string result = System.IO.Path.GetFileNameWithoutExtension(report.FilePath) + "" "" + DateTime.Now.ToShortDateString();
+    //result = report.ExecutionView.Name;
+    //result = report.Models[0].GetRestrictionByName(""A restriction name"").DisplayValue1;
+}
+    @Raw(result)";
+
+        const string razorTaskTemplate = @"@{
     ReportTask task = Model;
     Report report = task.Report;
     //Note that other assemblies can be used by saving the .dll in the Repository 'Assemblies' sub-folder...
     string result = ""1""; //Set result to 0 to cancel the report.
+    //Or cancel report with the flag CancelReport
+    //task.CancelReport = true;
+    //Or disable another task
+    //report.Tasks[1].Enabled = false;
 }
 @Raw(result)
 ";
 
-        const string razorCellScriptTemplate = @"@using Seal.Model
-@{
+        const string razorCellScriptTemplate = @"@{
     ResultCell cell = Model;
 
     ReportElement element = cell.Element;
@@ -44,6 +58,7 @@ namespace Seal.Forms
     Report report = reportModel.Report;
     //Script executed to modify a result cell 
     //Note that other assemblies can be used by saving the .dll in the Repository 'Assemblies' sub-folder...
+    //For performances reason, consider to process your result table in a dedicated Task with an execution step 'Models generated, before rendering' 
 	/*
     cell.ContextRow indicates the current row (type = int)
     cell.ContextCol indicates the current column (type = int)
@@ -64,7 +79,8 @@ namespace Seal.Forms
 
 	To customize your calculation and cell display, you can assign
 	cell.Value (type = object) is the cell value: string, double or DateTime
-	cell.FinalValue (type = string) is the final string used for the table cell
+	cell.FinalValue (type = string) is the final string used for the table cell, can contain HTML tag, 
+    e.g. cell.FinalValue = string.Format(""<a href='{0}' target=_blank>{0}</a>"", cell.DisplayValue);
 	cell.FinalCssStyle (type = string) is the final CSS style used for the table cell
 	cell.FinalCssClass (type = string) is the final CSS classes used for the table cell, could be one or many Bootstrap classes
 	*/
@@ -75,7 +91,8 @@ namespace Seal.Forms
         {
             new Tuple<string, string>(
                 "Simple format",
-@"if (cell.IsTitle)
+@"//For performances reason, consider to process your result table in a dedicated Task with an execution step 'Models generated, before rendering' 
+if (cell.IsTitle)
 	{
         if (cell.ContextIsSummaryTable) {
     		cell.FinalCssStyle = ""font-weight:bold;"";
@@ -104,7 +121,8 @@ namespace Seal.Forms
                 ),
             new Tuple<string, string>(
                 "Display negative values in red and bold",
-@"if (cell.DoubleValue < 0)
+@"//For performances reason, consider to process your result table in a dedicated Task with an execution step 'Models generated, before rendering' 
+if (cell.DoubleValue < 0)
 	{
 		cell.FinalCssStyle = ""font-weight:bold;"";
 		cell.FinalCssClass = ""danger lead text-right""; //These are Bootstrap classes
@@ -154,14 +172,27 @@ namespace Seal.Forms
 		//No running totals for last table line (summary or data)
 		cell.Value = null;		
 	}
-	else if (!cell.IsTitle && cell.ContextRow > 0)
+	else if (!cell.IsSerie && !cell.IsTitle && cell.ContextRow > 0)
 	{
         //Normal case for DataTable and SummaryTable
 		var previousValue = cell.ContextTable[cell.ContextRow-1,cell.ContextCol].DoubleValue;
-		var currentValue = cell.ContextTable[cell.ContextRow,cell.ContextCol-2].DoubleValue;
+		var currentValue = cell.ContextTable[cell.ContextRow,cell.ContextCol].DoubleValue;
 		//Calculate the running total
 		cell.Value = currentValue + (previousValue != null ? previousValue : 0);
     }	
+"
+                ),
+            new Tuple<string, string>(
+                "Add Hyperlink or File Download navigation",
+@"cell.AddNavigationHyperLink(""https://www.google.com"", report.TranslateRepository(""GeneralText"",""CellScript"",""Visit"") + "" Google"");
+    cell.AddNavigationHyperLink(cell.Value.ToString(), cell.DisplayValue);
+
+    //File download: this requires an implementation in the 'Navigation Script' of the model
+    if (!string.IsNullOrEmpty(cell.DisplayValue)) {
+        cell.AddNavigationFileDownload(""Download "" + cell.DisplayValue);
+        //An optional tag value (second parameter) can be set to identify the link in the 'Navigation Script', here we set ""2"" in NavigationLink.Tag
+        cell.AddNavigationFileDownload(""Download 2 "" + cell.DisplayValue, ""2"");
+    }
 "
                 ),
             new Tuple<string, string>(
@@ -172,8 +203,7 @@ namespace Seal.Forms
         };
 
 
-        const string razorTableDefinitionScriptTemplate = @"@using Seal.Model
-@using System.Data
+        const string razorTableDefinitionScriptTemplate = @"@using System.Data
 @{
     MetaTable metaTable = Model;
 	ReportExecutionLog log = metaTable;
@@ -189,12 +219,14 @@ namespace Seal.Forms
 }
 ";
 
-        const string razorTableLoadScriptTemplate = @"@using Seal.Model
-@using System.Data
+        const string razorTableLoadScriptTemplate = @"@using System.Data
 @{
     MetaTable metaTable = Model;
     DataTable table = metaTable.NoSQLTable;
 	ReportExecutionLog log = metaTable;
+    ReportModel reportModel = metaTable.NoSQLModel;
+    Report report = (reportModel != null ? reportModel.Report : null);
+    List<ReportRestriction> restrictions = (reportModel != null ? reportModel.Restrictions : null);
 
     //Default Script executed to fill the model result table from a non SQL source (if the model 'Load Script' is empty)
     //Insert values in the table, values must match the table columns defined in 'Definition Script'
@@ -206,8 +238,7 @@ namespace Seal.Forms
 }
 ";
 
-        const string razorModelLoadScriptTemplate = @"@using Seal.Model
-@using System.Data
+        const string razorModelLoadScriptTemplate = @"@using System.Data
 @{
     ReportModel model = Model;
     DataTable table = model.ResultTable;
@@ -229,8 +260,7 @@ namespace Seal.Forms
 }
 ";
 
-        const string razorModelLoadScriptTemplateNoSQL = @"@using Seal.Model
-@using System.Data
+        const string razorModelLoadScriptTemplateNoSQL = @"@using System.Data
 @{
     ReportModel model = Model;
     DataTable table = model.ResultTable;
@@ -246,8 +276,7 @@ namespace Seal.Forms
 }
 ";
 
-        const string razorModelPreLoadScriptTemplateNoSQL = @"@using Seal.Model
-@using System.Data
+        const string razorModelPreLoadScriptTemplateNoSQL = @"@using System.Data
 @{
     ReportModel model = Model;
 	ReportExecutionLog log = model.Report;
@@ -267,8 +296,7 @@ namespace Seal.Forms
 ";
 
 
-        const string razorTableFinalScriptTemplate = @"@using Seal.Model
-@using System.Data
+        const string razorModelFinalScriptTemplate = @"@using System.Data
 @{
     ReportModel model = Model;
  	ReportExecutionLog log = model.Report;
@@ -295,17 +323,76 @@ namespace Seal.Forms
 }
 ";
 
-        const string razorTasksTemplate = @"@using System.Text
-@functions {
-    //Before execution, this script will be added at the end of all task scripts...
-    public string MyConvertString(string input) {
-        return input.Replace(""__"",""_"");
+        const string razorModelCellNavigationScriptTemplate = @"@using System.Data
+@using System.IO
+@{
+    NavigationLink link = Model;
+    ResultCell cell = link.Cell;
+    ReportModel model = cell.ContextModel;
+
+    //Script executed for a cell navigation...
+    
+    //link.ScriptResult must contain the final file path to be downloaded
+
+    //Sample 1 to return a file from a disk path
+    //We assume here that path is in the first column of the model (the column can be hidden using 'Options: Columns to hide' in the Data Table View)
+    var pathCell = link.Cell.ContextCurrentLine[0];
+    //pathCell = link.Cell.ContextCurrentLine.FirstOrDefault(i => i.Element.ColumnName.StartsWith(""col_name""));
+    link.ScriptResult = pathCell.Value.ToString();
+    //Or in the link tag set in the Cell Script
+    link.ScriptResult = link.Tag;
+
+
+    //Sample 2 to return a file contained in a blob (to be adapted)
+    var helper = new TaskDatabaseHelper();
+    var command = helper.GetDbCommand(model.Connection.GetOpenConnection());
+
+    //We assume here that the id is in the first column of the model
+    var blobIdCell = link.Cell.ContextCurrentLine[0];
+    //blobIdCell = link.Cell.ContextCurrentLine.FirstOrDefault(i => i.Element.ColumnName.StartsWith(""col_name""));
+    var blobId = blobIdCell.Value;
+    command.CommandText = string.Format(""select blob_value from blob_table where blob_id = {0}"", blobId);
+    using (var reader = command.ExecuteReader())
+    {
+        if (reader.Read())
+        {
+            var blobName = link.Cell.Value.ToString(); //Name of the file containing the extension
+            link.ScriptResult = FileHelper.GetTempUniqueFileName(blobName);
+            File.WriteAllBytes(link.ScriptResult, (byte[]) reader[""blob_value""]);
+        }
     }
+
+    //The script will be executed for cell having the following initialization in a 'Cell Script': 
+    //cell.AddNavigationFileDownload(""Download"" + cell.DisplayValue);
 }
 ";
 
-        const string razorInitScriptTemplate = @"@using Seal.Model
+        const string razorModelReportNavigationScriptTemplate = @"@using System.IO
 @{
+    NavigationLink link = Model;
+    Report report = link.Report;
+
+    //Script executed for a report navigation...
+    //The report navigation is called from a link got from:
+    //report.GetReportNavigationScriptLink(string text = ""download"", string linkTag = """") to get a custom result (saved in link.ScriptResult)
+    //
+    //report.GetReportNavigationScriptLink(string text = ""html"", string linkTag = """") to get a file to download (final file path saved in link.ScriptResult)
+    
+    if (link.Text == ""download"") {
+        //Sample 1 to return a file from a disk path
+        link.ScriptResult = ""C:\\temp\\aFile.pdf"";
+        //Or in the link tag set in the Cell Script
+        link.ScriptResult = link.Tag;
+    }
+    else if (link.Text == ""html"") {
+        //Sample 2 to return a custom html
+        link.ScriptResult = string.Format(""<b> This is a custom HTML built in the 'Report Navigation Script' from the server at {0}.</b><hr>"", DateTime.Now);
+    }
+
+    //Check a full implementation in the sample report '17-Custom buttons and report navigation'
+}
+";
+        const string razorInitScriptTemplate = @"@{
     Report report = Model;
 	ReportExecutionLog log = report;
 
@@ -318,17 +405,17 @@ namespace Seal.Forms
 
     //report.DisplayName = System.IO.Path.GetFileNameWithoutExtension(report.FilePath) + ""-"" + DateTime.Now.ToShortDateString();
     
-    //Set the first value of an enum
-    //var enums = report.Models[0].Source.MetaData.Enums.FirstOrDefault(i=>i.Name == ""Category"");
-    //report.Models[0].GetRestrictionByName(""Category"").EnumValues.Add(enums.Values[0].Id);
+    //Set the last value of an enum
+    //var restr = report.Models[0].GetRestrictionByName(""Category"");
+    //restr.EnumValues.Clear();
+    //restr.EnumValues.Add(restr.EnumRE.Values[restr.EnumRE.Values.Count-1].Id);
 
     //Change view parameter to display the information Tab
     //report.ExecutionView.GetParameter(""information_button"").BoolValue = true;
 }
 ";
 
-        const string razorConfigurationReportCreationScriptTemplate = @"@using Seal.Model
-@{
+        const string razorConfigurationReportCreationScriptTemplate = @"@{
     Report report = Model;
 
     //Script executed when the report is created
@@ -347,9 +434,88 @@ namespace Seal.Forms
 }
 ";
 
+        const string razorConfigurationAuditScriptTemplate = @"@using System.Data
+@using System.Data.Common
+@using System.Data.OleDb
+@using System.Data.Odbc
 
-        const string razorSourceInitScriptTemplate = @"@using Seal.Model
-@using System.Data
+@{
+    Audit audit = Model;
+    var auditSource = Repository.Instance.Sources.FirstOrDefault(i => i.Name.StartsWith(""Audit""));  
+    if (auditSource != null) {
+        var helper = new TaskDatabaseHelper();
+        var command = helper.GetDbCommand(auditSource.Connection.GetOpenConnection());
+
+        //Create audit table if necessary
+        checkTableCreation(command);
+        command.CommandText = @""insert into sr_audit(event_date,event_type,user_name,user_groups,report_name,report_path,execution_context,execution_view,execution_duration,execution_error,output_type,output_name,output_information,output_error,schedule_name)"";
+        if (command is OleDbCommand || command is OdbcCommand) {
+            command.CommandText += "" values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"";
+        }
+        else {
+            command.CommandText += "" values(@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15)"";
+        }
+        
+        var date = DateTime.Now;
+        date = new DateTime(date.Year, date.Month, date.Day, date.Hour, date.Minute, date.Second);
+        int index=1;
+        addParameter(command, index++, DbType.DateTime, date); //event_date,
+        addParameter(command, index++, DbType.AnsiString, audit.Type.ToString()); //event_type,
+        addParameter(command, index++, DbType.AnsiString, audit.User != null ? audit.User.Name : (object) DBNull.Value); //user_name,
+        addParameter(command, index++, DbType.AnsiString, audit.User != null ? audit.User.SecurityGroupsDisplay : (object) DBNull.Value); //user_groups,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null ? audit.Report.ExecutionName : (object) DBNull.Value); //report_name,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null ? audit.Report.FilePath : (object) DBNull.Value); //report_path,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null ? audit.Report.ExecutionContext.ToString() : (object) DBNull.Value); //execution_context,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null ? audit.Report.ExecutionView.Name : (object) DBNull.Value); //execution_view,
+        addParameter(command, index++, DbType.Int32, audit.Report != null ? Convert.ToInt32(audit.Report.ExecutionFullDuration.TotalSeconds) : (object) DBNull.Value); //execution_duration,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null ? audit.Report.ExecutionErrors : (object) DBNull.Value); //execution_error,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null && audit.Report.OutputToExecute != null ? audit.Report.OutputToExecute.DeviceName : (object) DBNull.Value); //output_type,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null && audit.Report.OutputToExecute != null ? audit.Report.OutputToExecute.Name : (object) DBNull.Value);//output_name,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null && audit.Report.OutputToExecute != null && audit.Report.OutputToExecute.Information != null ? audit.Report.OutputToExecute.Information : (object) DBNull.Value);//output_information,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null && audit.Report.OutputToExecute != null && audit.Report.OutputToExecute.Error != null ? audit.Report.OutputToExecute.Error : (object) DBNull.Value);//output_error,
+        addParameter(command, index++, DbType.AnsiString, audit.Report != null && audit.Schedule != null ? audit.Schedule.Name : (object) DBNull.Value);//schedule_name
+        command.ExecuteNonQuery();                
+    }
+
+}
+
+@functions {
+    void checkTableCreation(DbCommand command)
+    {
+        if (Audit.CheckTableCreation)
+        {
+            //Check table creation
+            Audit.CheckTableCreation = false;
+            try
+            {
+                command.CommandText = ""select 1 from sr_audit where 1=0"";
+                command.ExecuteNonQuery();
+            }
+            catch
+            {
+                //Create the table (to be adapted for your database type, e.g. ident identity(1,1), execution_error varchar(max) for SQLServer)
+                command.CommandText = @""create table sr_audit (
+                        event_date datetime,event_type varchar(20),event_detail varchar(255),user_name varchar(255),user_groups varchar(255),report_name varchar(255),report_path varchar(255),execution_context varchar(255),execution_view varchar(255),execution_status varchar(255),execution_duration int null,execution_locale varchar(255),execution_error varchar(max),output_type varchar(255),output_name varchar(255),output_information varchar(max),output_error varchar(max),schedule_name varchar(255)
+                    )"";
+                command.ExecuteNonQuery();
+            }
+        }
+    }
+
+    void addParameter(DbCommand command, int index, DbType type, Object value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = ""@p"" + index.ToString();
+        parameter.DbType = type;
+        if (value is string && ((string)value).Length >= 255) parameter.Value = ((string)value).Substring(0, 254);
+        else parameter.Value = value;
+        command.Parameters.Add(parameter);
+    }
+}
+";
+
+
+        const string razorSourceInitScriptTemplate = @"@using System.Data
 @{
     MetaSource source = Model;
 	ReportExecutionLog log = null;
@@ -368,8 +534,7 @@ namespace Seal.Forms
 }
 ";
 
-        const string razorConfigurationInitScriptTemplate = @"@using Seal.Model
-@using System.Data
+        const string razorConfigurationInitScriptTemplate = @"@using System.Data
 @{
     Report report = Model;
 	ReportExecutionLog log = Model;
@@ -388,6 +553,111 @@ namespace Seal.Forms
 ";
         static readonly Tuple<string, string>[] tasksSamples =
         {
+            new Tuple<string, string>(
+                "Copy date input values to all date restrictions in the report",
+@"ReportTask task = Model;
+    Report report = task.Report;
+    //Take the first input value that has been defined in the report
+    var inputValue = report.InputValues[0];
+    foreach (var model in report.Models) {
+        foreach (var restriction in model.Restrictions.Where(i => i.TypeRe == ColumnType.DateTime)) {
+            restriction.Date1 = inputValue.Date1;
+            restriction.Date2 = inputValue.Date2;
+        }
+    }
+"
+                ),
+            new Tuple<string, string>(
+                "Format final result cells before rendering",
+@"ReportTask task = Model;
+    Report report = task.Report;   
+    //Note that this Task MUST BE executed at the step: 'Models generated, before rendering'
+    foreach (var model in report.Models) 
+    {
+        foreach (var page in model.Pages) 
+        {
+            //Format page result table
+            foreach (var line in page.PageTable.Lines) 
+            {
+                foreach (var cell in line) 
+                {
+                    if (cell.IsTitle) {
+                        cell.FinalCssStyle = ""font-size:20px; color:blue;"";
+                    }
+                }
+            }       
+            //Format data result table
+            foreach (var line in page.DataTable.Lines) 
+            {
+                foreach (var cell in line) 
+                {
+                    if (cell.Element != null && cell.Element.IsNumeric && cell.DoubleValue < 0) {
+                        cell.FinalCssStyle = ""font-weight:bold;color:red;"";
+                    }
+                }
+            }       
+        }
+    }
+"
+                ),
+            new Tuple<string, string>(
+                "Display the report input values",
+@"ReportTask task = Model;
+    Report report = task.Report;
+    foreach (ReportRestriction restr in report.InputValues) {
+        report.LogMessage(""[{0}]={1} Value={2}"", restr.DisplayNameEl, restr.DisplayText, restr.FirstValue); //You can use restr.Value1, restr.DisplayValue1, restr.FinalDate1, restr.EnumValues[0], restr.EnumDisplayValue, restr.FirstStringValue, restr.FirstNumericValue, restr.FirstDateValue
+    }
+    //Use also:
+    //ReportRestriction restr = report.GetInputValueByName(""AnInputName"");
+"
+            ),
+            new Tuple<string, string>(
+                "Update the navigation link text",
+@"ReportTask task = Model;
+    Report report = task.Report;   
+    //Note that this Task MUST BE executed at the step: 'Models generated, before rendering'
+    
+    foreach (var model in report.Models) 
+    {
+        foreach (var page in model.Pages) 
+        {
+            foreach (var line in page.DataTable.Lines) 
+            {
+                ResultCell cellFirstName = line.FirstOrDefault(i => i.Element != null && i.Element.Name == ""Employees.FirstName"");
+                ResultCell cellLastName = line.FirstOrDefault(i => i.Element != null && i.Element.Name == ""Employees.LastName"");
+                if (cellFirstName != null && cellLastName != null) {
+                    //Change the sub-report link generic text
+                    var link = cellLastName.Links.FirstOrDefault(i => i.Href.Contains(""Employee+Detail.srex""));
+                    if (link != null) {
+                        link.Text = ""View "" + cellFirstName.Value + "" "" + cellLastName.Value;
+                    }
+                }
+            }       
+        }
+    }
+"
+            ),
+            new Tuple<string, string>(
+                "Change the connections for a specific report output execution",
+@"ReportTask task = Model;
+    Report report = task.Report;
+    if (report.OutputToExecute != null && report.OutputToExecute.Name.StartsWith(""Your output name..."")) {
+        //Execution for a given output, we can modify the connections of the models
+        
+        //Select a model to modify
+        var model = report.Models.FirstOrDefault(i => i.Name.StartsWith(""Your model name...""));
+        if (model != null) {
+            //Select the new connection
+            var connection = model.Source.Connections.FirstOrDefault(i => i.Name.StartsWith(""Your connection name...""));
+            if (connection != null) {
+                report.LogMessage(""Setting connection '{0}' to '{1}'"", connection.Name, model.Name);
+                //Set it to the model
+                model.ConnectionGUID = connection.GUID;
+           }
+        }
+    }
+"
+                ),
             new Tuple<string, string>(
                 "Refresh Data Sources enumerated lists",
 @"ReportTask task = Model;
@@ -439,7 +709,7 @@ namespace Seal.Forms
     var helper = new TaskHelper(task);
 	helper.LoadTableFromDataSource(
         ""DataSourceName"", //the name of the source Data Source defined in the Repository
-        ""SourceSelectStatement"", //Select SQL Statement to get the source table
+        ""SourceSelectStatement"", //SQL Select Statement to get the source table
         ""DestinationTableName"", //destination table name
         false, //if true, the table is loaded for all connections defined in the Source
         """", //optional SQL Select Statement to get a Check table from the source connection
@@ -454,7 +724,7 @@ namespace Seal.Forms
     var helper = new TaskHelper(task);
 	helper.LoadTableFromExternalSource(
         ""SourceConnectionString"", //full connection string used to load the source table
-        ""SourceSelectStatement"", //Select SQL Statement to get the source table
+        ""SourceSelectStatement"", //SQL Select Statement to get the source table
         ""DestinationTableName"", //destination table name
         false, //if true, the table is loaded for all connections defined in the Source
         """", //optional SQL Select Statement to get a Check table from the source connection
@@ -500,17 +770,18 @@ namespace Seal.Forms
     var helper = new TaskHelper(task);
     var dbHelper = helper.DatabaseHelper;
 	// configuration of the database helper may be changed to control the table creation and load...	
-	dbHelper.ColumnCharType = """"; //Type of table created when text is detected
-	dbHelper.ColumnIntegerType = """"; //Type of table created when integer is detected
-	dbHelper.ColumnNumericType = """"; //Type of table created when numeric is detected
-	dbHelper.ColumnDateTimeType = """"; //Type of table created when datetime is detected
+	dbHelper.ColumnCharType = """"; //type of table created when text is detected
+	dbHelper.ColumnIntegerType = """"; //type of table created when integer is detected
+	dbHelper.ColumnNumericType = """"; //type of table created when numeric is detected
+	dbHelper.ColumnDateTimeType = """"; //type of table created when datetime is detected
 	dbHelper.ColumnCharLength = 0; //char length, 0 means auto size (or max for SQLServer)
 	dbHelper.InsertBurstSize = 500; //number of insert per SQL command when inserting records in the destination table
+    dbHelper.MaxDecimalNumber = -1; //if >= 0, the maximum number of decimals for numeric values in the INSERT command
 	dbHelper.LoadBurstSize = 0; //number of records to load from the table (to be used with LoadSortColumn), 0 means to load all records in one query, otherwise several queries are performed
 	dbHelper.LoadSortColumn = """"; //name of the column used to sort if LoadBurstSize is specified, 
     dbHelper.UseDbDataAdapter = false; //If true, the DbDataAdapter.Fill() is used instead of the DataReader
 	dbHelper.ExcelOdbcDriver = ""Driver={{Microsoft Excel Driver (*.xls, *.xlsx, *.xlsm, *.xlsb)}}; DBQ={0}""; //Excel ODBC Driver used to load table from Excel
-	dbHelper.DefaultEncoding = Encoding.Default; //encoding used to read the CSV file 
+	dbHelper.DefaultEncoding = System.Text.Encoding.Default; //encoding used to read the CSV file 
 	dbHelper.TrimText = true; //if true, all texts are trimmed when inserted in the destination table
 	dbHelper.RemoveCrLf = false; //if true, the CrLf are removed from text when inserted in the destination table
 	dbHelper.DebugMode = false; //if true, full debug traces are logged in dbHelper.DebugLog
@@ -529,7 +800,7 @@ namespace Seal.Forms
     dbHelper.MyGetTableCreateCommand = new CustomGetTableCreateCommand(delegate(DataTable table) {
         //return RootGetTableCreateCommand(table);
         //Root implementation may be the following...
-        StringBuilder result = new StringBuilder();
+        var result = new System.Text.StringBuilder();
         foreach (DataColumn col in table.Columns)
         {
             if (result.Length > 0) result.Append(',');
@@ -543,7 +814,7 @@ namespace Seal.Forms
     dbHelper.MyGetTableColumnNames = new CustomGetTableColumnNames(delegate(DataTable table) {
         //return dbHelper.RootGetTableColumnNames(table);
         //Root implementation may be the following...
-        StringBuilder result = new StringBuilder();
+        var result = new System.Text.StringBuilder();
         foreach (DataColumn col in table.Columns)
         {
             if (result.Length > 0) result.Append(',');
@@ -568,10 +839,10 @@ namespace Seal.Forms
         return dbHelper.RootGetTableColumnValues(row, dateTimeFormat);
     });
 
-	dbHelper.MyGetTableColumnValue = new CustomGetTableColumnValue(delegate(DataRow row, DataColumn col, string dateTimeFormat) {
+    dbHelper.MyGetTableColumnValue = new CustomGetTableColumnValue(delegate(DataRow row, DataColumn col, string dateTimeFormat) {
         //return dbHelper.RootGetTableColumnValue(row, col, datetimeFormat);
         //Root implementation may be the following...
-        StringBuilder result = new StringBuilder();
+        var result = new System.Text.StringBuilder();
         if (row.IsNull(col))
         {
             result.Append(""NULL"");
@@ -594,7 +865,7 @@ namespace Seal.Forms
         return result.ToString();
     });
 
-    dbHelper.MyLoadDataTable = new CustomLoadDataTable(delegate(string connectionString, string sql) {
+    dbHelper.MyLoadDataTable = new CustomLoadDataTable(delegate(ConnectionType connectionType, string connectionString, string sql) {
         return new DataTable(); //Check current source implementation in TaskDatabaseHelper.cs
     });
 
@@ -609,10 +880,12 @@ namespace Seal.Forms
                 ),
         };
 
-        
+
+        const string sqlConnectionString = @"Server=myServerAddress;Database=myDatabase;Trusted_Connection=True";
+        const string odbcConnectionString = @"DSN=myDataSourceName;DATABASE=myDatabase";
         public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext context)
         {
-            if (context.Instance is ReportView && context.PropertyDescriptor.IsReadOnly) return UITypeEditorEditStyle.None;
+            if (context != null && context.Instance is ReportView && context.PropertyDescriptor.IsReadOnly) return UITypeEditorEditStyle.None;
             return UITypeEditorEditStyle.Modal;
         }
 
@@ -645,14 +918,14 @@ namespace Seal.Forms
                         ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }
-                else if (context.Instance is ReportViewPartialTemplate)
+                else if (context.Instance is ReportViewPartialTemplate || context.Instance is PartialTemplatesEditor)
                 {
-                    var pt = context.Instance as ReportViewPartialTemplate;
+                    var pt = context.Instance is ReportViewPartialTemplate ? context.Instance as ReportViewPartialTemplate : ((PartialTemplatesEditor)context.Instance).GetPartialTemplate(context.PropertyDescriptor.Name);
                     var templateText = pt.View.Template.GetPartialTemplateText(pt.Name);
                     if (string.IsNullOrEmpty(valueToEdit)) valueToEdit = templateText;
                     template = templateText;
                     frm.Text = "Edit custom partial template";
-                    frm.ObjectForCheckSyntax = pt.View.Template.ForReportModel ? (object)pt.View.Model : (object)pt.View;
+                    frm.ObjectForCheckSyntax = pt.View;
                     ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                 }
                 else if (context.Instance is ReportTask)
@@ -664,7 +937,7 @@ namespace Seal.Forms
                     List<string> samples = new List<string>();
                     foreach (var sample in tasksSamples)
                     {
-                        samples.Add("@using Seal.Model\r\n@using Seal.Helpers\r\n@using System.Data\r\n@{\r\n\t//" + sample.Item1 + "\r\n\t" + sample.Item2 + "}\r\n|" + sample.Item1);
+                        samples.Add("@using System.Data\r\n@{\r\n    //" + sample.Item1 + "\r\n    " + sample.Item2 + "}\r\n|" + sample.Item1);
                     }
                     frm.SetSamples(samples);
                 }
@@ -687,34 +960,41 @@ namespace Seal.Forms
                         if (parameter.TextSamples != null) frm.SetSamples(parameter.TextSamples.ToList());
                     }
                 }
-                else if (context.Instance.GetType().ToString() == "SealPdfConverter.PdfConverter")
+                else if (context.Instance.GetType().ToString() == "Seal.Converter.PdfConverter")
                 {
                     string language = "cs";
                     SealPdfConverter converter = (SealPdfConverter)context.Instance;
                     converter.ConfigureTemplateEditor(frm, context.PropertyDescriptor.Name, ref template, ref language);
                     ScintillaHelper.Init(frm.textBox, language);
                 }
-                else if (context.Instance.GetType().ToString() == "SealExcelConverter.ExcelConverter")
+                else if (context.Instance.GetType().ToString() == "Seal.Converter.ExcelConverter")
                 {
                     string language = "cs";
                     SealExcelConverter converter = (SealExcelConverter)context.Instance;
                     converter.ConfigureTemplateEditor(frm, context.PropertyDescriptor.Name, ref template, ref language);
                     ScintillaHelper.Init(frm.textBox, language);
                 }
-                else if (context.Instance is ViewFolder)
+                else if (context.Instance is Report)
                 {
                     if (context.PropertyDescriptor.Name == "DisplayName")
                     {
                         template = displayNameTemplate;
-                        frm.ObjectForCheckSyntax = ((ReportComponent)context.Instance).Report;
+                        frm.ObjectForCheckSyntax = (Report)context.Instance;
                         frm.Text = "Edit display name script";
                         ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "InitScript")
                     {
                         template = razorInitScriptTemplate;
-                        frm.ObjectForCheckSyntax = ((ReportComponent)context.Instance).Report;
+                        frm.ObjectForCheckSyntax = (Report)context.Instance;
                         frm.Text = "Edit the script executed when the report is initialized";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
+                    }
+                    else if (context.PropertyDescriptor.Name == "NavigationScript")
+                    {
+                        template = razorModelReportNavigationScriptTemplate;
+                        frm.ObjectForCheckSyntax = new NavigationLink() { Report = (Report)context.Instance };
+                        frm.Text = "Edit the navigation script executed for the report";
                         ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }
@@ -728,11 +1008,18 @@ namespace Seal.Forms
                         List<string> samples = new List<string>();
                         foreach (var sample in razorCellScriptSamples)
                         {
-                            samples.Add("@using Seal.Model\r\n@{\r\n\t//" + sample.Item1 + "\r\n\tResultCell cell=Model;\r\n\tReportElement element = cell.Element;\r\n\tReportModel reportModel = element.Model;\r\n\tReport report = reportModel.Report;\r\n\t" + sample.Item2 + "}\r\n|" + sample.Item1);
+                            samples.Add("@{\r\n\t//" + sample.Item1 + "\r\n\tResultCell cell=Model;\r\n\tReportElement element = cell.Element;\r\n\tReportModel reportModel = element.Model;\r\n\tReport report = reportModel.Report;\r\n\t" + sample.Item2 + "}\r\n|" + sample.Item1);
                         }
                         frm.SetSamples(samples);
 
-                        frm.ObjectForCheckSyntax = new ResultCell();
+                        frm.ObjectForCheckSyntax = new ResultCell() { Element = element };
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
+                    }
+                    else if (context.PropertyDescriptor.Name == "NavigationScript")
+                    {
+                        template = razorModelCellNavigationScriptTemplate;
+                        frm.ObjectForCheckSyntax = new NavigationLink() { Cell = new ResultCell() { Element = element }, Report = element.Report };
+                        frm.Text = "Edit the navigation script executed for the model";
                         ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                     else if (context.PropertyDescriptor.Name == "SQL")
@@ -769,6 +1056,21 @@ namespace Seal.Forms
                         frm.Text = "Edit column name";
                         ScintillaHelper.Init(frm.textBox, Lexer.Sql);
                         frm.textBox.WrapMode = WrapMode.Word;
+                    }
+                }
+                else if (context.Instance is MetaConnection)
+                {
+                    if (context.PropertyDescriptor.Name == "MSSqlServerConnectionString")
+                    {
+                        template = sqlConnectionString;
+                        frm.Text = "Edit the MS SQLServer Connection script";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Null);
+                    }
+                    if (context.PropertyDescriptor.Name == "OdbcConnectionString")
+                    {
+                        template = odbcConnectionString;
+                        frm.Text = "Edit the ODBC Connection script";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Null);
                     }
                 }
                 else if (context.Instance is SealSecurity)
@@ -809,7 +1111,7 @@ namespace Seal.Forms
                     }
                     else if (context.PropertyDescriptor.Name == "FinalScript")
                     {
-                        template = razorTableFinalScriptTemplate;
+                        template = razorModelFinalScriptTemplate;
                         frm.ObjectForCheckSyntax = context.Instance;
                         frm.Text = "Edit the final script executed for the model";
                         ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
@@ -837,37 +1139,18 @@ namespace Seal.Forms
                     frm.Text = "Edit the init script of the source";
                     ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                 }
-                else if (context.Instance is TasksFolder)
-                {
-                    if (context.PropertyDescriptor.Name == "TasksScript")
-                    {
-                        template = razorTasksTemplate;
-                        frm.ObjectForCheckSyntax = new ReportTask();
-                        if (CurrentEntity is Report)
-                        {
-                            frm.ScriptHeader = ((Report)CurrentEntity).Repository.Configuration.CommonScriptsHeader;
-                            frm.ScriptHeader += ((Report)CurrentEntity).Repository.Configuration.TasksScript;
-                            frm.ScriptHeader += ((Report)CurrentEntity).CommonScriptsHeader;
-                        }
-                        frm.Text = "Edit the script that will be added to all task scripts";
-                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
-                    }
-                }
                 else if (context.Instance is CommonScript)
                 {
                     template = CommonScript.RazorTemplate;
                     frm.Text = "Edit the script that will be added to all scripts executed for the report.";
                     if (CurrentEntity is SealServerConfiguration)
                     {
-                        //common script from configuration
-                        frm.ScriptHeader = ((SealServerConfiguration)CurrentEntity).GetCommonScriptsHeader((CommonScript)context.Instance);
+                        //common script from configuration, nothing to include, we rely on @Include
                     }
                     if (CurrentEntity is Report)
                     {
                         //common script from report
-                        frm.ScriptHeader = ((Report)CurrentEntity).Repository.Configuration.CommonScriptsHeader;
-                        frm.ScriptHeader += ((Report)CurrentEntity).GetCommonScriptsHeader((CommonScript)context.Instance);
-
+                        frm.ScriptHeader = ((Report)CurrentEntity).GetCommonScriptsHeader((CommonScript)context.Instance);
                     }
                     frm.ObjectForCheckSyntax = CurrentEntity;
                     ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
@@ -884,19 +1167,18 @@ namespace Seal.Forms
                         frm.Text = "Edit the root init script";
                         ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
-                    else if (context.PropertyDescriptor.Name == "TasksScript")
-                    {
-                        template = razorTasksTemplate;
-                        frm.ScriptHeader = ((SealServerConfiguration)context.Instance).CommonScriptsHeader;
-                        frm.ObjectForCheckSyntax = new ReportTask();
-                        frm.Text = "Edit the script that will be added to all task scripts";
-                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
-                    }
                     else if (context.PropertyDescriptor.Name == "ReportCreationScript")
                     {
                         template = razorConfigurationReportCreationScriptTemplate;
                         frm.ObjectForCheckSyntax = report;
                         frm.Text = "Edit the script executed when a new report is created";
+                        ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
+                    }
+                    else if (context.PropertyDescriptor.Name == "AuditScript")
+                    {
+                        template = razorConfigurationAuditScriptTemplate;
+                        frm.ObjectForCheckSyntax = new Audit();
+                        frm.Text = "Edit the script executed when a an audit event occurs";
                         ScintillaHelper.Init(frm.textBox, Lexer.Cpp);
                     }
                 }

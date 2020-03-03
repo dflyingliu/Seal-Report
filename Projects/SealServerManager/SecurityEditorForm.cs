@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -32,9 +32,9 @@ namespace Seal.Forms
 
             security.InitEditor();
             mainPropertyGrid.ToolbarVisible = false;
-            mainPropertyGrid.SelectedObject = security;
             mainPropertyGrid.PropertySort = PropertySort.Categorized;
             mainPropertyGrid.LineColor = SystemColors.ControlLight;
+            mainPropertyGrid.SelectedObject = security;
             mainPropertyGrid.PropertyValueChanged += mainPropertyGrid_PropertyValueChanged;
 
             Text = Repository.SealRootProductName + " Security Editor";
@@ -46,12 +46,39 @@ namespace Seal.Forms
         private void ConfigurationEditorForm_Load(object sender, EventArgs e)
         {
 
-                infoTextBox.Text = @"This editor allows to configure the security used to publish your reports on the Web Server.
+                infoTextBox.Text = @"This editor allows to configure the security used to publish your reports and dashboards on the Web Server.
 
-Security groups define which repository folders are published and which columns, data sources, connections or devices are shown in the Web Report Designer.
+Security groups define:
+which repository folders are published,
+if the user can view reports and/or dashboards,
+if the user has personal folders,
+which columns, data sources, connections or devices can be selected with the Web Report Designer,
+which public dashboards are published,
+if the user has personal dashboards,
+which widgets can be selected with the Dashboard Manager.
+
 The security provider performs the authentication and select the security groups of the user.
 
-If a user belongs to several groups, the weakest right is applied.
+Rules applied if a user belongs to several groups:
+- Folders: the highest right is used (No right, Execute reports / View files, Execute reports and outputs / View files, Edit schedules / View files, Edit reports / Manage files)
+- Personal folder: the highest right is used (No personal folder, Personal folder for files only, Personal folder for reports and files)
+- View type: the union of the views (Reports, Dashboards)
+- Show all folders: true if one group has this flag set to true
+
+Web Report Designer Security
+- SQL Models: True if true in one group
+- Devices: Cannot be selected if it is specified in one group
+- Sources: Cannot be selected if it is specified in one group
+- Connections: Cannot be selected if it is specified in one group
+- Columns: Cannot be selected if it is specified in one group
+
+Dashboard Publication
+- Dashboards Folders: the union of the Dashboards folders published with their highest right
+- Manage Dashboards View: true if one group has the right to Manage Dashboards View
+- Personal Dashboard Folder: true if one group has a personal Dashboard Folder
+
+Dashboard Manager Security
+- Widgets: Cannot be selected if it is specified in one group
 ";
             
             Visible = true;

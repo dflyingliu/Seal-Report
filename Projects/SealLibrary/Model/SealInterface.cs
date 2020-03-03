@@ -1,22 +1,25 @@
-﻿using Seal.Forms;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
+using Seal.Helpers;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Windows.Forms;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// Virtual class for SealInterface implementation
+    /// </summary>
     public class SealInterface
     {
         public static SealInterface Create(Repository repository)
         {
             SealInterface result = null;
             //Check if an implementation is available in a .dll
-            string applicationPath = string.IsNullOrEmpty(repository.ApplicationPath) ? Path.GetDirectoryName(Application.ExecutablePath) : repository.ApplicationPath;
+            string applicationPath = string.IsNullOrEmpty(repository.ApplicationPath) ? Helper.GetApplicationDirectory() : repository.ApplicationPath;
             if (File.Exists(Path.Combine(applicationPath, "SealInterface.dll")))
             {
                 try
@@ -43,6 +46,12 @@ namespace Seal.Model
             return "";
         }
 
+#if !NETCOREAPP
+        public virtual bool ProcessAction(string action, WebBrowser webBrowser, NavigationContext navigation)
+        {
+            return false;
+        } 
+ #endif
         protected Repository _repository = null;
     }
 }

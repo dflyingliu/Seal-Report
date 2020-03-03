@@ -1,28 +1,27 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.ComponentModel;
 using System.Data;
-using System.Data.OleDb;
-using Seal.Converter;
 using System.Drawing.Design;
 using System.Xml.Serialization;
 using Seal.Helpers;
 using Seal.Forms;
 using DynamicTypeDescriptor;
-using RazorEngine;
 using RazorEngine.Templating;
 using System.Globalization;
-using System.Runtime.Serialization;
 using System.Data.Common;
+using System.Text;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// A MetaTable defines a table in a database and contains a list of MetaColumns.
+    /// </summary>
     public class MetaTable : RootComponent, ReportExecutionLog
     {
         #region Editor
@@ -67,18 +66,31 @@ namespace Seal.Model
         }
         #endregion
 
+        /// <summary>
+        /// Creates a basic MetaTable
+        /// </summary>
         public static MetaTable Create()
         {
             return new MetaTable() { GUID = Guid.NewGuid().ToString() };
         }
 
+        /// <summary>
+        /// Current execution log
+        /// </summary>
         [XmlIgnore]
         public ReportExecutionLog Log = null;
+
+        /// <summary>
+        /// Logs message in the execution log
+        /// </summary>
         public void LogMessage(string message, params object[] args)
         {
             if (Log != null) Log.LogMessage(message, args);
         }
 
+        /// <summary>
+        /// Name of the table in the database. The name can be empty if an SQL Statement is specified.
+        /// </summary>
         [Category("Definition"), DisplayName("Name"), Description("Name of the table in the database. The name can be empty if an SQL Statement is specified."), Id(1, 1)]
         public override string Name
         {
@@ -86,137 +98,133 @@ namespace Seal.Model
             set { _name = value; }
         }
 
-        string _sql;
-        [Category("Definition"), DisplayName("SQL Statement"), Description("Select SQL Statement executed to define the table. If empty, the table name is used."), Id(2, 1)]
+        /// <summary>
+        /// SQL Select Statement executed to define the table. If empty, the table name is used.
+        /// </summary>
+        [Category("Definition"), DisplayName("SQL Select Statement"), Description("SQL Select Statement executed to define the table. If empty, the table name is used."), Id(2, 1)]
         [Editor(typeof(SQLEditor), typeof(UITypeEditor))]
-        public string Sql
-        {
-            get { return _sql; }
-            set { _sql = value; }
-        }
+        public string Sql { get; set; }
 
-        //Table used for No SQL Source
+        /// <summary>
+        /// DataTable used for No SQL Source 
+        /// </summary>
         [XmlIgnore]
         public DataTable NoSQLTable = null;
 
-        string _definitionScript;
+        /// <summary>
+        /// ReportModel set for No SQL Source
+        /// </summary>
+        [XmlIgnore]
+        public ReportModel NoSQLModel = null;
+
+        /// <summary>
+        /// The Razor Script used to built the DataTable object that defines the table
+        /// </summary>
         [Category("Definition"), DisplayName("Definition Script"), Description("The Razor Script used to built the DataTable object that defines the table."), Id(1, 1)]
         [Editor(typeof(TemplateTextEditor), typeof(UITypeEditor))]
-        public string DefinitionScript
-        {
-            get { return _definitionScript; }
-            set { _definitionScript = value; }
-        }
+        public string DefinitionScript { get; set; }
 
-        string _loadScript;
+        /// <summary>
+        /// The Default Razor Script used to load the data in the table. This can be overwritten in the model.
+        /// </summary>
         [Category("Definition"), DisplayName("Default Load Script"), Description("The Default Razor Script used to load the data in the table. This can be overwritten in the model."), Id(4, 1)]
         [Editor(typeof(TemplateTextEditor), typeof(UITypeEditor))]
-        public string LoadScript
-        {
-            get { return _loadScript; }
-            set { _loadScript = value; }
-        }
+        public string LoadScript { get; set; }
 
-        private string _alias;
+        /// <summary>
+        /// If not empty, table alias name used in the SQL statement. The table alias is necessary if a SQL Statement is specified.
+        /// </summary>
         [Category("Definition"), DisplayName("Table Alias"), Description("If not empty, table alias name used in the SQL statement. The table alias is necessary if a SQL Statement is specified."), Id(5, 1)]
-        public string Alias
-        {
-            get { return _alias; }
-            set { _alias = value; }
-        }
+        public string Alias { get; set; }
 
         bool _dynamicColumns = false;
+        /// <summary>
+        /// If true, columns are generated automatically from the Table Name or the SQL Select Statement by reading the database catalog
+        /// </summary>
         [DefaultValue(false)]
-        [Category("Definition"), DisplayName("Dynamic Columns"), Description("If true, columns are generated automatically from the Table Name or the Select SQL Statement by reading the database catalog."), Id(6, 1)]
+        [Category("Definition"), DisplayName("Dynamic Columns"), Description("If true, columns are generated automatically from the Table Name or the SQL Select Statement by reading the database catalog."), Id(6, 1)]
         public bool DynamicColumns
         {
             get { return _dynamicColumns; }
             set
             {
                 _dynamicColumns = value;
-                UpdateEditorAttributes();
+                UpdateEditorAttributes();  //!NETCore
             }
         }
+        public bool ShouldSerializeDynamicColumns() { return _dynamicColumns; }
 
-        bool _keepColumnNames = false;
+        /// <summary>
+        /// "If true, the display names of the columns are kept when generated from the source SQL
+        /// </summary>
         [DefaultValue(false)]
-        [Category("Definition"), DisplayName("Keep Column Names"), Description("If true, column names are kept when generated from the database catalog."), Id(7, 1)]
-        public bool KeepColumnNames
-        {
-            get { return _keepColumnNames; }
-            set { _keepColumnNames = value; }
-        }
+        [Category("Definition"), DisplayName("Keep Column Names"), Description("If true, the display names of the columns are kept when generated from the source SQL."), Id(7, 1)]
+        public bool KeepColumnNames { get; set; } = false;
 
-
-        private string _type;
+        /// <summary>
+        /// Type of the table got from database catalog
+        /// </summary>
         [Category("Definition"), DisplayName("Table Type"), Description("Type of the table got from database catalog."), Id(8, 1)]
-        public string Type
-        {
-            get { return _type; }
-            set { _type = value; }
-        }
+        public string Type { get; set; }
 
+        /// <summary>
+        /// If true, the table must be refreshed for dynamic columns
+        /// </summary>
+        [DefaultValue(false)]
+        public bool MustRefresh { get; set; } = false;
+        public bool ShouldSerializeMustRefresh() { return MustRefresh; }
 
-        private bool _mustRefresh = false;
-        public bool MustRefresh
-        {
-            get { return _mustRefresh; }
-            set { _mustRefresh = value; }
-        }
-
-        string _preSQL;
+        /// <summary>
+        /// SQL Statement executed before the query when the table is involved. The statement may contain Razor script if it starts with '@'.
+        /// </summary>
         [Category("SQL"), DisplayName("Pre SQL Statement"), Description("SQL Statement executed before the query when the table is involved. The statement may contain Razor script if it starts with '@'."), Id(2, 2)]
         [Editor(typeof(SQLEditor), typeof(UITypeEditor))]
-        public string PreSQL
-        {
-            get { return _preSQL; }
-            set { _preSQL = value; }
-        }
+        public string PreSQL { get; set; }
 
-        string _postSQL;
+        /// <summary>
+        /// SQL Statement executed after the query when the table is involved. The statement may contain Razor script if it starts with '@'.
+        /// </summary>
         [Category("SQL"), DisplayName("Post SQL Statement"), Description("SQL Statement executed after the query when the table is involved. The statement may contain Razor script if it starts with '@'."), Id(3, 2)]
         [Editor(typeof(SQLEditor), typeof(UITypeEditor))]
-        public string PostSQL
-        {
-            get { return _postSQL; }
-            set { _postSQL = value; }
-        }
+        public string PostSQL { get; set; }
 
-        bool _ignorePrePostError = false;
+        /// <summary>
+        /// If true, errors occuring during the Pre or Post SQL statements are ignored and the execution continues
+        /// </summary>
         [DefaultValue(false)]
         [Category("SQL"), DisplayName("Ignore Pre and Post SQL Errors"), Description("If true, errors occuring during the Pre or Post SQL statements are ignored and the execution continues."), Id(4, 2)]
-        public bool IgnorePrePostError
-        {
-            get { return _ignorePrePostError; }
-            set { _ignorePrePostError = value; }
-        }
+        public bool IgnorePrePostError { get; set; } = false;
+        public bool ShouldSerializeIgnorePrePostError() { return IgnorePrePostError; }
 
-        string _whereSQL;
+        /// <summary>
+        /// Additional SQL added in the WHERE clause when the table is involved in a query. The text may contain Razor script if it starts with '@'.
+        /// </summary>
         [Category("SQL"), DisplayName("Additional WHERE Clause"), Description("Additional SQL added in the WHERE clause when the table is involved in a query. The text may contain Razor script if it starts with '@'."), Id(5, 2)]
         [Editor(typeof(SQLEditor), typeof(UITypeEditor))]
-        public string WhereSQL
-        {
-            get { return _whereSQL; }
-            set { _whereSQL = value; }
-        }
+        public string WhereSQL { get; set; }
 
-        private List<MetaColumn> _columns = new List<MetaColumn>();
-        public List<MetaColumn> Columns
-        {
-            get { return _columns; }
-            set { _columns = value; }
-        }
+        /// <summary>
+        /// List of MetColumn defined for the table
+        /// </summary>
+        public List<MetaColumn> Columns { get; set; } = new List<MetaColumn>();
+        public bool ShouldSerializeColumns() { return Columns.Count > 0; }
 
+        /// <summary>
+        /// Alias name of the table
+        /// </summary>
         [XmlIgnore]
         public string AliasName
         {
             get
             {
-                if (!string.IsNullOrEmpty(_alias)) return _alias;
+                if (!string.IsNullOrEmpty(Alias)) return Alias;
                 return string.Format("{0}", _name);
             }
         }
 
+        /// <summary>
+        /// Full SQL name of the table
+        /// </summary>
         [XmlIgnore]
         public string FullSQLName
         {
@@ -224,35 +232,32 @@ namespace Seal.Model
             {
                 if (!string.IsNullOrEmpty(Sql))
                 {
-                    return string.Format("({0}) {1}", Sql, SQLName);
+                    return string.Format("(\r\n{0}\r\n) {1}", Sql, AliasName);
                 }
-                return SQLName;
-            }
-        }
-
-        [XmlIgnore]
-        public string SQLName
-        {
-            get
-            {
-                if (!string.IsNullOrEmpty(_alias))
+                else if (!string.IsNullOrEmpty(_name) && !string.IsNullOrEmpty(Alias))
                 {
-                    return string.Format("{0} {1}", _name, _alias).Trim();
+                    return string.Format("{0} {1}", _name, Alias);
                 }
-                return string.Format("{0}", _name);
+                return AliasName;
             }
         }
 
+        /// <summary>
+        /// Display name including the type
+        /// </summary>
         [XmlIgnore]
         public string DisplayName
         {
             get
             {
-                if (string.IsNullOrEmpty(_type)) return AliasName;
-                return string.Format("{0} ({1})", AliasName, _type);
+                if (string.IsNullOrEmpty(Type)) return AliasName;
+                return string.Format("{0} ({1})", AliasName, Type);
             }
         }
 
+        /// <summary>
+        /// True if table is the master table
+        /// </summary>
         [XmlIgnore]
         public bool IsMasterTable
         {
@@ -262,16 +267,101 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if the table is editable
+        /// </summary>
         [XmlIgnore]
         public bool IsEditable = true;
 
+        /// <summary>
+        /// True if the source containing the table is a standard SQL source
+        /// </summary>
         [XmlIgnore]
         public bool IsSQL
         {
             get { return !_source.IsNoSQL; }
         }
 
+        /// <summary>
+        /// True if the table is for a SQL Model
+        /// </summary>
+        [XmlIgnore]
+        public bool IsForSQLModel
+        {
+            get { return Model != null; }
+        }
+
+        /// <summary>
+        /// ReportModel when the MetaTable comes from a SQL Model
+        /// </summary>
+        [XmlIgnore]
+        public ReportModel Model = null;
+
+        /// <summary>
+        /// Returns the SQL with the name and the CTE (Common Table Expression)
+        /// </summary>
+        public void GetExecSQLName(ref string CTE, ref string name)
+        {
+            CTE = "";
+            string sql = "";
+            if (Sql != null && Sql.Length > 5 && Sql.ToLower().Trim().StartsWith("with"))
+            {
+                var startIndex = Sql.IndexOf("(");
+                if (startIndex > 0)
+                {
+                    bool inComment = false, inQuote = false;
+                    for (int i = 0; i < Sql.Length - 5; i++)
+                    {
+                        switch (Sql[i])
+                        {
+                            case ')':
+                                if (!inComment && !inQuote)
+                                {
+                                    CTE = Sql.Substring(0, i + 1).Trim() + "\r\n";
+                                    sql = Sql.Substring(i + 1).Trim();
+                                    i = Sql.Length;
+                                }
+                                break;
+                            case '\'':
+                                inQuote = !inQuote;
+                                break;
+                            case '/':
+                                if (Sql[i + 1] == '*')
+                                {
+                                    inComment = true;
+                                }
+                                break;
+                            case '*':
+                                if (inComment && Sql[i + 1] == '/')
+                                {
+                                    inComment = false;
+                                }
+                                break;
+                            case '-':
+                                if (inComment && Sql[i + 1] == '-')
+                                {
+                                    while (i < Sql.Length - 5 && (Sql[i] != '\r' || Sql[i] != '\n')) i++;
+                                }
+                                break;
+                        }
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(CTE) || string.IsNullOrEmpty(sql))
+            {
+                name = FullSQLName;
+            }
+            else
+            {
+                name = string.Format("(\r\n{0}\r\n) {1}", sql, AliasName); ;
+            }
+        }
+
         protected MetaSource _source;
+        /// <summary>
+        /// Current MetaSource
+        /// </summary>
         [XmlIgnore, Browsable(false)]
         public MetaSource Source
         {
@@ -279,12 +369,18 @@ namespace Seal.Model
             set { _source = value; }
         }
 
+        /// <summary>
+        /// Returns the last order to display the columns
+        /// </summary>
         public int GetLastDisplayOrder()
         {
             if (Columns.Count > 0) return Columns.Max(i => i.DisplayOrder) + 1;
             return 1;
         }
 
+        /// <summary>
+        /// For No SQL Source, build the DataTable from the DefinitionScript, if withLoad is true, the table is then loaded with the LoadScript
+        /// </summary>
         public DataTable BuildNoSQLTable(bool withLoad)
         {
             lock (this)
@@ -299,36 +395,67 @@ namespace Seal.Model
         DataTable GetDefinitionTable(string sql)
         {
             DataTable result = null;
-            if (IsSQL)
+            var finalSQL = sql;
+            try
             {
-                DbConnection connection = _source.GetOpenConnection();
-                Helper.ExecutePrePostSQL(connection, PreSQL, this, IgnorePrePostError);
-                result = Helper.GetDataTable(connection, sql);
-                Helper.ExecutePrePostSQL(connection, PostSQL, this, IgnorePrePostError);
-                connection.Close();
+                if (IsSQL)
+                {
+                    DbConnection connection = _source.GetOpenConnection();
+
+                    Helper.ExecutePrePostSQL(connection, Model == null ? ReportModel.ClearCommonRestrictions(PreSQL) : Model.ParseCommonRestrictions(PreSQL), this, IgnorePrePostError);
+                    finalSQL = Model == null ? ReportModel.ClearCommonRestrictions(sql) : Model.ParseCommonRestrictions(sql);
+                    result = Helper.GetDataTable(connection, finalSQL);
+                    Helper.ExecutePrePostSQL(connection, Model == null ? ReportModel.ClearCommonRestrictions(PostSQL) : Model.ParseCommonRestrictions(PostSQL), this, IgnorePrePostError);
+                    connection.Close();
+                }
+                else
+                {
+                    result = BuildNoSQLTable(false);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                result = BuildNoSQLTable(false);
+                throw new Exception(ex.Message + "\r\n" + finalSQL);
             }
+
             return result;
         }
 
+        /// <summary>
+        /// Refresh the dynamic columns
+        /// </summary>
         public void Refresh()
         {
             if (_source == null || !DynamicColumns) return;
 
             try
             {
-                _information = "";
-                _error = "";
+                Information = "";
+                Error = "";
                 MustRefresh = true;
-                DataTable defTable = GetDefinitionTable(string.Format("SELECT * FROM {0} WHERE 1=0", FullSQLName));
+                //Build table def from SQL or table name
 
+                var sql = "";
+                if (IsForSQLModel)
+                {
+                    if (Model.UseRawSQL) sql = Sql;
+                    else sql = string.Format("SELECT * FROM ({0}) a WHERE 1=0", Sql);
+                }
+                else
+                {
+                    string CTE = "", name = "";
+                    GetExecSQLName(ref CTE, ref name);
+                    sql = string.Format("{0}SELECT * FROM {1} WHERE 1=0", CTE, name);
+                }
+
+                DataTable defTable = GetDefinitionTable(sql);
+
+                int position = 1;
                 foreach (DataColumn column in defTable.Columns)
                 {
-                    string fullColumnName = (IsSQL ? Source.GetTableName(AliasName) + "." : "") + Source.GetColumnName(column.ColumnName);
-                    MetaColumn newColumn = Columns.FirstOrDefault(i => i.Name == fullColumnName);
+                    string fullColumnName = (IsSQL && !IsForSQLModel ? Source.GetTableName(AliasName) + "." : "") + Source.GetColumnName(column.ColumnName);
+                    MetaColumn newColumn = Columns.FirstOrDefault(i => i.Name.ToLower() == fullColumnName.ToLower());
+                    column.ColumnName = fullColumnName; //Set it here to clear the columns later
                     ColumnType type = Helper.NetTypeConverter(column.DataType);
                     if (newColumn == null)
                     {
@@ -347,34 +474,38 @@ namespace Seal.Model
                         newColumn.Type = type;
                         newColumn.SetStandardFormat();
                     }
+                    newColumn.DisplayOrder = position++;
                 }
 
-                //Clear columns for No SQL
-                if (!IsSQL)
-                {                    
+                //Clear columns for No SQL or SQL Model
+                if (!IsSQL || IsForSQLModel)
+                {
                     Columns.RemoveAll(i => !defTable.Columns.Contains(i.Name));
                 }
 
                 MustRefresh = false;
-                _information = "Dynamic columns have been refreshed successfully";
+                Information = "Dynamic columns have been refreshed successfully";
             }
             catch (Exception ex)
             {
-                _error = ex.Message;
-                _information = "Error got when refreshing dynamic columns.";
+                Error = ex.Message;
+                Information = "Error got when refreshing dynamic columns.";
             }
-            _information = Helper.FormatMessage(_information);
-            UpdateEditorAttributes();
+            Information = Helper.FormatMessage(Information);
+            UpdateEditorAttributes();  //!NETCore
         }
 
+        /// <summary>
+        /// Sort the table columns either by alphanumeric order or by position
+        /// </summary>
         public void SortColumns(bool byPosition)
         {
             if (_source == null) return;
 
             try
             {
-                _information = "";
-                _error = "";
+                Information = "";
+                Error = "";
 
                 List<string> colNames = new List<string>();
 
@@ -403,32 +534,35 @@ namespace Seal.Model
 
                 foreach (var col in Columns) if (col.DisplayOrder == -1) col.DisplayOrder = GetLastDisplayOrder();
 
-                _information = "Columns have been sorted by " + (byPosition ? "SQL position" : "Name");
+                Information = "Columns have been sorted by " + (byPosition ? "SQL position" : "Name");
             }
             catch (Exception ex)
             {
-                _error = ex.Message;
-                _information = "Error got when sorting columns.";
+                Error = ex.Message;
+                Information = "Error got when sorting columns.";
             }
-            _information = Helper.FormatMessage(_information);
-            UpdateEditorAttributes();
+            Information = Helper.FormatMessage(Information);
+            UpdateEditorAttributes();  //!NETCore
         }
 
+        /// <summary>
+        /// Check the table. If a MetaColumn is specified, only the column is checked.
+        /// </summary>
         public void CheckTable(MetaColumn column)
         {
             if (_source == null) return;
 
-            _information = "";
-            _error = "";
+            Information = "";
+            Error = "";
 
             if (IsMasterTable && IsSQL && string.IsNullOrEmpty(Sql))
             {
-                _information = Helper.FormatMessage("No Select SQL Statement defined for the Master table...");
+                Information = Helper.FormatMessage("No SQL Select Statement defined for the Master table...");
                 return;
             }
             if (IsMasterTable && !IsSQL && string.IsNullOrEmpty(DefinitionScript))
             {
-                _information = Helper.FormatMessage("No Script defined for the Master table...");
+                Information = Helper.FormatMessage("No Script defined for the Master table...");
                 return;
             }
 
@@ -445,9 +579,11 @@ namespace Seal.Model
                     }
                     if (string.IsNullOrEmpty(colNames)) colNames = "1";
 
-                    string sql = string.Format("SELECT {0} FROM {1} WHERE 1=0", colNames, FullSQLName);
+                    string CTE = "", name = "";
+                    GetExecSQLName(ref CTE, ref name);
+                    string sql = string.Format("{0}SELECT {1} FROM {2} WHERE 1=0", CTE, colNames, name);
 
-                    if (!string.IsNullOrEmpty(WhereSQL))
+                    if (!string.IsNullOrWhiteSpace(WhereSQL))
                     {
                         var where = RazorHelper.CompileExecute(WhereSQL, this);
                         if (!string.IsNullOrWhiteSpace(where)) sql += string.Format("\r\nAND ({0})", RazorHelper.CompileExecute(where, this));
@@ -456,18 +592,18 @@ namespace Seal.Model
                     {
                         sql += string.Format("\r\nGROUP BY {0}", groupByNames);
                     }
-                    _error = _source.CheckSQL(sql, new List<MetaTable>() { this }, null, false);
+                    Error = _source.CheckSQL(sql, new List<MetaTable>() { this }, null, false);
                 }
                 else
                 {
                     BuildNoSQLTable(true);
                 }
 
-                if (string.IsNullOrEmpty(_error)) _information = "Table checked successfully";
-                else _information = "Error got when checking table.";
+                if (string.IsNullOrEmpty(Error)) Information = "Table checked successfully";
+                else Information = "Error got when checking table.";
                 if (column != null)
                 {
-                    column.Error = _error;
+                    column.Error = Error;
                     if (string.IsNullOrEmpty(column.Error)) column.Information = "Column checked successfully";
                     else column.Information = "Error got when checking column.";
                     column.Information = Helper.FormatMessage(column.Information);
@@ -475,17 +611,22 @@ namespace Seal.Model
             }
             catch (TemplateCompilationException ex)
             {
-                _error = Helper.GetExceptionMessage(ex);
+                Error = Helper.GetExceptionMessage(ex);
             }
             catch (Exception ex)
             {
-                _error = ex.Message;
-                _information = "Error got when checking the table.";
+                Error = ex.Message;
+                Information = "Error got when checking the table.";
             }
-            _information = Helper.FormatMessage(_information);
-            UpdateEditorAttributes();
+            Information = Helper.FormatMessage(Information);
+            UpdateEditorAttributes();  //!NETCore
         }
 
+        /// <summary>
+        /// Return the values from a column in the table
+        /// </summary>
+        /// <param name="column"></param>
+        /// <returns></returns>
         public string ShowValues(MetaColumn column)
         {
             string result = "";
@@ -535,6 +676,9 @@ namespace Seal.Model
 
         #region Helpers
 
+        /// <summary>
+        /// Editor Helper: Create or update dynamic columns for this table
+        /// </summary>
         [Category("Helpers"), DisplayName("Refresh dynamic columns"), Description("Create or update dynamic columns for this table."), Id(2, 10)]
         [Editor(typeof(HelperEditor), typeof(UITypeEditor))]
         public string HelperRefreshColumns
@@ -542,6 +686,9 @@ namespace Seal.Model
             get { return "<Click to refresh dynamic columns>"; }
         }
 
+        /// <summary>
+        /// Editor Helper: Check the table definition
+        /// </summary>
         [Category("Helpers"), DisplayName("Check table"), Description("Check the table definition."), Id(3, 10)]
         [Editor(typeof(HelperEditor), typeof(UITypeEditor))]
         public string HelperCheckTable
@@ -549,23 +696,19 @@ namespace Seal.Model
             get { return "<Click to check the table in the database>"; }
         }
 
-        string _information;
+        /// <summary>
+        /// Last information message
+        /// </summary>
         [XmlIgnore, Category("Helpers"), DisplayName("Information"), Description("Last information message."), Id(4, 10)]
         [EditorAttribute(typeof(InformationUITypeEditor), typeof(UITypeEditor))]
-        public string Information
-        {
-            get { return _information; }
-            set { _information = value; }
-        }
+        public string Information { get; set; }
 
-        string _error;
+        /// <summary>
+        /// Last error message
+        /// </summary>
         [XmlIgnore, Category("Helpers"), DisplayName("Error"), Description("Last error message."), Id(5, 10)]
         [EditorAttribute(typeof(ErrorUITypeEditor), typeof(UITypeEditor))]
-        public string Error
-        {
-            get { return _error; }
-            set { _error = value; }
-        }
+        public string Error { get; set; }
 
         #endregion
 

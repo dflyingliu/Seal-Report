@@ -1,25 +1,43 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// A ResultTotalCell is a ResultCell dedicated for totals
+    /// </summary>
     public class ResultTotalCell : ResultCell
     {
         const long kTickDivider = 10000000;
 
+        /// <summary>
+        /// Sum, Min, Max after claculations
+        /// </summary>
         public double? Sum = null, Min = null, Max = null;
+
+        /// <summary>
+        /// Date sum after claculations
+        /// </summary>
         public long? DateSum = null;
+
+        /// <summary>
+        /// Date Min and Max after calculations
+        /// </summary>
         public DateTime? DateMin = null, DateMax = null;
 
+        /// <summary>
+        /// List of ResultCell
+        /// </summary>
         public List<ResultCell> Cells = new List<ResultCell>();
 
         private bool _done = false;
+        /// <summary>
+        /// Perform the calculations
+        /// </summary>
         public void Calculate()
         {
             if (_done) return;
@@ -85,10 +103,11 @@ namespace Seal.Model
             _done = true;
         }
 
+        /// <summary>
+        /// Set the common row or col of the cells part of the total. May be used in the cell script for Series values
+        /// </summary>
         public void ProcessContext()
         {
-            //set the common row or col of the cells part of the total
-            //may be used in the cell script for Series values
             int commonRow = -1, commonCol = -1;
             if (Cells.Count > 0)
             {

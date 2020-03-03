@@ -1,17 +1,15 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.ComponentModel;
 using Seal.Model;
 using System.Globalization;
-using Seal.Helpers;
 
-namespace Seal.Converter
+namespace Seal.Forms
 {
     public class SourceTableConverter : StringConverter
     {
@@ -39,14 +37,14 @@ namespace Seal.Converter
             }
             if (metadata != null)
             {
-                choices.AddRange((from s in metadata.Tables select s.SQLName));
+                choices.AddRange((from s in metadata.Tables select s.AliasName));
             }
             else
             {
                 choices.Add("No Connection");
             }
 
-            return new StandardValuesCollection(choices);
+            return new StandardValuesCollection(choices.OrderBy(i => i).ToList());
         }
 
         public override bool CanConvertTo(ITypeDescriptorContext context, Type destType)
@@ -64,7 +62,7 @@ namespace Seal.Converter
                 if (metadata != null)
                 {
                     MetaTable table = metadata.Tables.FirstOrDefault(i => i.GUID == value.ToString());
-                    if (table != null) return table.SQLName;
+                    if (table != null) return table.AliasName;
                 }
             }
             return base.ConvertTo(context, culture, value, destType);
@@ -82,7 +80,7 @@ namespace Seal.Converter
             if (context.Instance is ReportModel) metadata = ((ReportModel)context.Instance).Source.MetaData;
             if (metadata != null)
             {
-                MetaTable table = metadata.Tables.FirstOrDefault(i => i.SQLName == value.ToString());
+                MetaTable table = metadata.Tables.FirstOrDefault(i => i.AliasName == value.ToString());
                 if (table != null) return table.GUID;
             }
             return base.ConvertFrom(context, culture, value);

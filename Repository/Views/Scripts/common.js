@@ -1,22 +1,12 @@
-﻿//d3 formatting
-String.prototype.replaceAll = function (find, replace) {
-    var str = this;
-    return str.replace(new RegExp(find.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'), replace);
-};
-String.prototype.valueFormat = function (value) {
-    var str = this;
-    return str.replaceAll(',', thousandSeparator).replaceAll('$', currencySymbol).replace('.', decimalSeparator);
-};
-String.prototype.normalizeNumeric = function (valueStr) {
-    return parseFloat(this.replaceAll(',', '').replace(/\s+/g, ''));
-};
-
-
+﻿
 function restrictionSelectChange(source) {
     var idSelect = "#" + $(source).attr('id');
     if ($(source).attr('opid') != null) {
         idSelect = "#" + $(source).attr('opid');
     }
+    if ($(source).attr('id') == null && $(source).attr('opid') !== null) return;
+    if ($(idSelect).val() == null) return;
+
     var idValue = idSelect.replace("Operator", "Value");
 
     var op = $(idSelect).val().toLowerCase();
@@ -65,7 +55,6 @@ function initNavMenu() {
     }
 }
 
-
 function setMessageHeight() {
     if (!printLayout) {
         setTimeout(function () {
@@ -87,8 +76,9 @@ function scrollMessages() {
 }
 
 function resize() {
-    if (!printLayout) $("body").css("padding-top", $("#bar_top").height() + 15);
+    if (!printLayout) setTimeout(function () { $("body").css("padding-top", $("#bar_top").height() + 15); }, 200);
     setMessageHeight();
+    redrawDataTables();
 }
 
 function showNavMenu() {
@@ -113,71 +103,18 @@ function realMouseCoords(event) {
         totalOffsetX += currentElement.offsetLeft - currentElement.scrollLeft;
         totalOffsetY += currentElement.offsetTop - currentElement.scrollTop;
     }
-    while (currentElement = currentElement.offsetParent)
+    while (currentElement = currentElement.offsetParent);
 
     canvasX = event.pageX - totalOffsetX;
     canvasY = event.pageY - totalOffsetY;
     return { x: canvasX, y: canvasY }
 }
 
-//navigation menu
-var popupNavMenuTimeout = -1;
-function showPopupNavMenu(source, content, forChart) {
-    var $popup = $('#nav_popupmenu');
-    if (!$popup.length) {
-        $popup = $("<ul id='nav_popupmenu' class='dropdown-menu' role='menu'/>");
-        $("body").append($popup);
-        $popup
-            .mouseenter(function () {
-                $popup.show();
-            })
-            .mouseleave(function () {
-                $popup.hide();
-            });
-    }
-    $popup.html(content);
-    $('#nav_popupmenu li').click(function (e) {
-        executeReport($(this).attr("nav"));
-        $popup.hide();
-    });
-
-    var scrollLeft = document.body.scrollLeft + document.documentElement.scrollLeft;
-    var scrollTop = document.body.scrollTop + document.documentElement.scrollTop;
-    var posLeft = forChart ? source.clientX + scrollLeft : source.offset().left;
-    var posTop = forChart ? source.clientY + scrollTop : source.offset().top + source.height() + 3;
-    posLeft += Math.min(0, window.innerWidth + scrollLeft - $popup.width() - posLeft);
-    posTop += Math.min(0, window.innerHeight + scrollTop - $popup.height() - posTop - 50);
-
-    $popup
-        .show()
-        .css({
-            position: "absolute",
-            left: posLeft,
-            top: posTop
-        });
-
-    if (popupNavMenuTimeout != -1) clearTimeout(popupNavMenuTimeout);
-    popupNavMenuTimeout = setTimeout(function () { $popup.hide(); }, 3000);
-}
-
-
-function initNavCells() {
-    $("td:not([navigation=''])")
-        .mouseenter(function (e) {
-            if ($(this).attr("navigation")) {
-                showPopupNavMenu($(this), $(this).attr("navigation"), false);
-            }
-        })
-        .mouseleave(function () {
-            $("#nav_popupmenu").hide();
-        });
-}
-
 //message menu
 function initMessageMenu() {
     var messages = $("#execution_messages");
     messages.mouseenter(function (e) {
-        var $menu = $("#message_popupmenu")
+        var $menu = $("#message_popupmenu");
         $menu
             .mouseenter(function () {
                 $menu.show();
@@ -202,8 +139,8 @@ function initMessageMenu() {
 
     //autoscroll
     $("#message_autoscroll").click(function () {
-        submitViewParameter(rootViewId, "messages_autoscroll", $('#message_autoscroll').is(":checked"));
-     });
+        if (generateHTMLDisplay) submitViewParameter($("#execution_guid").val(), rootViewId, "messages_autoscroll", $('#message_autoscroll').is(":checked"));
+    });
 
     //message options
     $("#message_export").click(function () {
@@ -251,7 +188,6 @@ function executeTimer() {
     }
 }
 
-
 function setProgressBarMessage(selector, progression, message, classname) {
     $(selector).css('width', progression + '%').css('min-width', '120px').attr('aria-valuenow', progression);
     $(selector).html(message);
@@ -260,6 +196,18 @@ function setProgressBarMessage(selector, progression, message, classname) {
 }
 
 function executeReport(nav) {
+    if (nav != null && nav.startsWith("HL:")) { //Hyperlink
+        window.open(nav.replace("HL:", ""), '_blank');
+        return;
+    }
+
+    $("#navigation_id").val(nav);
+    if (nav != null && nav.startsWith("FD:")) { //File download
+        $("#header_form").attr("action", urlPrefix + "ActionNavigate");
+        $("#header_form").submit();
+        return;
+    }
+
     if (refreshTimer) clearInterval(refreshTimer);
 
     var url = "";
@@ -283,13 +231,12 @@ function executeReport(nav) {
         setProgressBarMessage("#progress_bar", 5, startingExecText, "progress-bar-success");
 
         url = urlPrefix + (nav == null ? "ActionExecuteReport" : "ActionNavigate");
-        if (nav == null || urlPrefix == "") executionTimer = setInterval(function () { executeTimer() }, 1200);
+        if (nav == null || urlPrefix == "") executionTimer = setInterval(function () { executeTimer(); }, 1200);
     }
     else {
         url = urlPrefix + "ActionCancelReport";
     }
 
-    $("#navigation_id").val(nav);
     $("#header_form").attr("target", "");
     if (urlPrefix != "") {
         $.post(url, $("#header_form").serialize()).done(function (data) {
@@ -309,61 +256,127 @@ function executeReport(nav) {
     $("#nav_button").attr("disabled", "disabled");
 
     setMessageHeight();
-}
 
-function submitViewParameter(viewId, parameterName, parameterValue) {
-    if (generateHTMLDisplay) {
-        if (urlPrefix != "") {
-            $.post(urlPrefix + "ActionUpdateViewParameter", { execution_guid: $("#execution_guid").val(), parameter_view_id: viewId, parameter_view_name: parameterName, parameter_view_value: parameterValue });
-        }
-        else {
-            $("#parameter_view_id").val(viewId);
-            $("#parameter_view_name").val(parameterName);
-            $("#parameter_view_value").val(parameterValue);
-            $("#header_form").attr("action", "ActionUpdateViewParameter");
-            $("#header_form").submit();
-        }
+    if (showMsgDuringExec) {
+        $("#" + rootViewId).removeClass("active in");
+        $("#report_button").parent().removeClass("active");
+        $("#information_button").parent().removeClass("active");
+        $("#message_div").addClass("active in");
+        $("#message_button").parent().addClass("active");
     }
 }
 
+//Enum select picker
+function requestEnumData(filter, forceNoMessage) {
+    var result;
 
-function getTableData(datatable, guid, viewid, pageid, data, callback, settings) {
-    try {
-        var params = data.draw + "§" + settings.aaSorting + "§" + settings.oPreviousSearch.sSearch.replace("<", "&lt;").replace(">", "&gt;") + "§" + settings._iDisplayLength + "§" + settings._iDisplayStart
+    if (urlPrefix != "") {
+        $.post(urlPrefix + "ActionGetEnumValues", { execution_guid: $("#execution_guid").val(), enum_id: $("#id_enumload").val(), filter: filter })
+            .done(function (data) {
+                result = jQuery.parseJSON(data);
+                fillEnumSelect(result, forceNoMessage || result.length > 0);
+            });
+    }
+    else {
+        $("#header_form").attr("action", "ActionGetEnumValues");
+        $("#filter_enumload").val(filter);
+        $("#header_form").submit();
+        result = jQuery.parseJSON($("#parameter_enumload").text());
+        fillEnumSelect(result, forceNoMessage || result.length > 0);
+    }
+    return result;
+}
+
+
+function fillEnumSelect(data, noMessage) {
+    var id = "#" + $("#id_enumload").val();
+
+    //Add selected items
+    $(id + " option:selected").each(function () {
+        var found = false;
+        for (var i = 0; !found && i < data.length; i++) {
+            if ($(this).val() == data[i].v) {
+                data[i].Selected = true;
+                found = true;
+            }
+        }
+
+        if (!found) {
+            data.push({ v: $(this).val(), t: $(this).text(), Selected: true });
+        }
+    });
+
+    var $enum = $(id);
+    if (data.length > 0 || $enum[0].length > 0) {
+        $enum.empty();
+        for (var i = 0; i < data.length; i++) {
+            $enum.append(
+                $("<option" + (data[i].Selected ? " selected" : "") + "></option>").attr("id", data[i].v).attr("value", data[i].v).text(data[i].t)
+            );
+        }
+        $enum.selectpicker("refresh");
+    }
+
+    var $message = $("#enum-message");
+    if ($message) $message.text("");
+    if (!noMessage && $enum.attr("message")) {
+        //Add info message
+        if ($message.length == 0) {
+            $message = $("<li>").attr("id", "enum-message").addClass("no-results");
+        }
+        $message.text($enum.attr("message"));
+        $enum.parent().children("div").children("ul").append($message);
+    }
+}
+
+function initEnums() {
+    $(".enum").selectpicker({
+        "liveSearch": true,
+        "actionsBox": true
+    });
+
+    $(".enum").on('hide.bs.select', function (e, clickedIndex, isSelected, previousValue) {
+        //send current values
+        var ids = "";
+        $("#" + $(this).attr("id") + " option:selected").each(function () {
+            ids += $(this).val() + ",";
+        });
         if (urlPrefix != "") {
-            $.post(urlPrefix + "ActionGetTableData", { execution_guid: guid, viewid: viewid, pageid: pageid, parameters: params })
-                .done(function (data) {
-                    try {
-                        var json = jQuery.parseJSON(data);
-                        callback(json);
-                        initNavCells();
-                    }
-                    catch (ex) {
-                        datatable[0].innerHTML = "Error loading data..." + "<br>" + ex.message;
-                    }
-                });
+            $.post(urlPrefix + "ActionUpdateEnumValues", { execution_guid: $("#execution_guid").val(), enum_id: $(this).attr("id"), values: ids });
         }
         else {
-            $("#header_form").attr("action", "ActionGetTableData");
-            $("#parameter_tableload").html(params);
-            $("#viewid_tableload").val(viewid);
-            $("#pageid_tableload").val(pageid);
+            $("#id_enumload").val($(this).attr("id"));
+            $("#values_enumload").val(ids);
+            $("#header_form").attr("action", "ActionUpdateEnumValues");
             $("#header_form").submit();
-            var json = jQuery.parseJSON($("#parameter_tableload").text());
-            callback(json);
-            $("#parameter_tableload").html("");
-            initNavCells();
         }
-    }
-    catch (ex2) {
-        datatable[0].innerHTML = "Error loading data..." + "<br>" + ex2.message;
-    }
+    });
+
+    $(".enum_dynamic").on('shown.bs.select', function (e, clickedIndex, isSelected, previousValue) {
+        if ($(this).attr("id")) {
+            $("#id_enumload").val($(this).attr("id"));
+
+            var data = [];
+            if ($(this).attr("dependencies")) requestEnumData("", false);
+
+            var filter = "";
+            $(".bs-searchbox input").on("input", function (evt) {
+                var $search = $(evt.target);
+                if ($search.val() !== filter) { // search value is changed
+                    filter = $search.val();
+                    if (filter.length >= $("#" + $("#id_enumload").val()).attr("filterchars")) { // more than xx characters
+                        requestEnumData(filter, true);
+                    }
+                }
+            });
+        }
+    });
 }
 
 function mainInit() {
     //force execute
     $("input").keydown(function (event) {
-        if (event.keyCode == 13) $("#execute_button").focus()
+        if (event.keyCode == 13) $("#execute_button").focus();
     });
 
     $("#execute_button").click(function () {
@@ -373,7 +386,7 @@ function mainInit() {
     });
 
     $("#restrictions_button").click(function () {
-        submitViewParameter(rootViewId, "restriction_button", !$("#restrictions_div").hasClass("in"));
+        if (generateHTMLDisplay) submitViewParameter($("#execution_guid").val(), rootViewId, "restriction_button", !$("#restrictions_div").hasClass("in"));
         $("#restrictions_button").toggleClass("active");
         //Collapse navbar
         if ($('.navbar-toggle').css('display') != 'none') $('.navbar-toggle').click();
@@ -387,21 +400,22 @@ function mainInit() {
 
     //tabs buttons
     $(".sr_tab").click(function () {
-        submitViewParameter(rootViewId, "information_button", false);
+        var buttonId = $(this).attr("id");
+        if (generateHTMLDisplay) submitViewParameter($("#execution_guid").val(), "information_button", buttonId == "information_button");
         if ($("#message_button").length) {
-            submitViewParameter(rootViewId, "message_button", false);
-            scrollMessages();
+            var messageMode = "enabled";
+            if (buttonId == "message_button") {
+                messageMode = "enabledshown";
+                scrollMessages();
+            }
+            if (generateHTMLDisplay) submitViewParameter($("#execution_guid").val(), rootViewId, "messages_mode", messageMode);
         }
-        submitViewParameter(rootViewId, $(this).attr("id"), true);
-
-        setTimeout(function () { //redraw dataTables
-            $($.fn.dataTable.tables(true)).DataTable().columns.adjust().responsive.recalc();
-        }, 200);
+        redrawDataTables();
 
         //Collapse navbar
         if ($('.navbar-toggle').css('display') != 'none') $('.navbar-toggle').click();
     });
-    
+
     //result links
     $(".sr_result").click(function () {
         $("#header_form").attr("target", urlPrefix != "" ? "_blank" : "");
@@ -455,8 +469,8 @@ function mainInit() {
 
         $("#nav_badge").removeClass("hidden");
     }
+    initNavCells();
 }
-
 
 $(document).ready(function () {
     mainInit();
@@ -465,22 +479,21 @@ $(document).ready(function () {
 
     //Select Picker
     $(".operator_select").selectpicker('refresh');
-    $(".enum").selectpicker({
-        "liveSearch": true,
-        "actionsBox": true
-    });
+    initEnums();
 
     //Date Picker
     $(".datepicker_datetime").datetimepicker({
         showClose: true,
         showClear: true,
         format: shortDateTimeFormat,
+        tooltips: dtTooltips
     });
 
     $(".datepicker_date").datetimepicker({
         showClose: true,
         showClear: true,
-        format: shortDateFormat
+        format: shortDateFormat,
+        tooltips: dtTooltips
     });
 
     $('.datepicker_date,.datepicker_datetime').datetimepicker({
@@ -496,20 +509,29 @@ $(document).ready(function () {
     if (!executionTimer && refreshRate > 0) refreshTimer = setInterval(executeReport, refreshRate * 1000);
 
     //back to top
-    $(window).scroll(function () {
-        if ($(this).scrollTop() > 50) $('#back-to-top').fadeIn();
-        else $('#back-to-top').fadeOut();
-    });
+    if (!printLayout) {
+        $(window).scroll(function () {
+            if ($(this).scrollTop() > 50) $('#back-to-top').fadeIn();
+            else $('#back-to-top').fadeOut();
+        });
 
-    // scroll body to 0px on click
-    $('#back-to-top').click(function () {
-        $('#back-to-top').tooltip('hide');
-        $('body,html').animate({
-            scrollTop: 0
-        }, 800);
-        return false;
-    });
-    if (!printLayout) $('#back-to-top').tooltip('show');
+        $('#back-to-top').click(function () {
+            $('#back-to-top').tooltip('hide');
+            $('body,html').animate({
+                scrollTop: 0
+            }, 800);
+            return false;
+        });
+
+        $('#back-to-top-close').click(function () {
+            $('#back-to-top').tooltip('hide');
+            $('#back-to-top').fadeOut();
+            return false;
+        });
+
+        $('#back-to-top').tooltip('show');
+    }
+
     initMessageMenu();
     scrollMessages();
 

@@ -1,57 +1,48 @@
-﻿using DynamicTypeDescriptor;
-using RazorEngine;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
 using RazorEngine.Templating;
-using Seal.Converter;
 using Seal.Helpers;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Drawing.Design;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Windows.Forms.Design;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// The SecurityProvider defines how the login is done and the security groups are added to the user
+    /// </summary>
     public class SecurityProvider
     {
-        string _name;
-        public string Name
-        {
-            get { return _name; }
-            set { _name = value; }
-        }
+        /// <summary>
+        /// Name 
+        /// </summary>
+        public string Name { get; set; }
 
-        string _filePath;
-        public string FilePath
-        {
-            get { return _filePath; }
-            set { _filePath = value; }
-        }
+        /// <summary>
+        /// Current file path
+        /// </summary>
+        public string FilePath { get; set; }
 
-        string _script = "";
-        public string Script
-        {
-            get { return _script; }
-            set { _script = value; }
-        }
+        /// <summary>
+        /// Razor script used to perfrom the login
+        /// </summary>
+        public string Script { get; set; } = "";
 
-        //Not used anymore...
-        bool _promptUserPassword = false;
-        public bool PromptUserPassword
-        {
-            get { return _promptUserPassword; }
-            set { _promptUserPassword = value; }
-        }
+        /// <summary>
+        /// Property not used anymore
+        /// </summary>
+        public bool PromptUserPassword { get; set; } = false;
 
-        List<SecurityParameter> _parameters = new List<SecurityParameter>();
-        public List<SecurityParameter> Parameters
-        {
-            get { return _parameters; }
-            set { _parameters = value; }
-        }
+        /// <summary>
+        /// List of SecurityParameter
+        /// </summary>
+        public List<SecurityParameter> Parameters { get; set; } = new List<SecurityParameter>();
 
+        /// <summary>
+        /// Current Configuration
+        /// </summary>
         public string Configuration
         {
             get
@@ -65,19 +56,20 @@ namespace Seal.Model
                 }
                 catch (Exception ex)
                 {
-                    _error = ex.Message;
+                    Error = ex.Message;
                 }
                 return result;
             }
         }
 
-        string _error = "";
-        public string Error
-        {
-            get { return _error; }
-            set { _error = value; }
-        }
+        /// <summary>
+        /// Current error
+        /// </summary>
+        public string Error { get; set; } = "";
 
+        /// <summary>
+        /// List of available SecurityProvider
+        /// </summary>
         public static List<SecurityProvider> LoadProviders(string providerFolder)
         {
             List<SecurityProvider> providers = new List<SecurityProvider>();
@@ -93,7 +85,7 @@ namespace Seal.Model
 
         public void ClearConfiguration()
         {
-            _parameters.Clear();
+            Parameters.Clear();
         }
 
 
@@ -113,11 +105,11 @@ namespace Seal.Model
             }
             catch (TemplateCompilationException ex)
             {
-                _error = Helper.GetExceptionMessage(ex);
+                Error = Helper.GetExceptionMessage(ex);
             }
             catch (Exception ex)
             {
-                _error = string.Format("Unexpected error got when parsing security provider.\r\n{0}", ex.Message);
+                Error = string.Format("Unexpected error got when parsing security provider.\r\n{0}", ex.Message);
             }
         }
 

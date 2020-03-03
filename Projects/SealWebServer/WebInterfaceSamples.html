@@ -5,6 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <link href="https://sealreport.org/demo/Images/favicon.ico" rel="shortcut icon" type="image/x-icon" />
+    <title>Seal Web Interface Samples</title>
 
     <!-- Latest compiled and minified CSS -->
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
@@ -32,15 +34,14 @@
         }
     </style>
     <script>
-        var sealServer = "/";
+        var sealServer = "/demo/";
         //sealServer = "http://localhost:17178/seal/";
-        var connected = false; 
+        var connected = false;
 
         function enableControls() {
             $("button").prop("disabled", !connected);
             $("#login_button").prop("disabled", connected);
             $("#version_button").prop("disabled", false);
-
         }
 
         $(document).ready(function () {
@@ -171,6 +172,7 @@
                     form.append($('<input />').attr('name', 'r3_name').attr('value', "Customer Contact"));
                     form.append($('<input />').attr('name', 'r3_operator').attr('value', "Contains"));
                     form.append($('<input />').attr('name', 'r3_value_1').attr('value', "ar"));
+                    form.append($('<input />').attr('name', 'use_default_restrictions').attr('value', "true"));
                     form.children('input').attr('type', 'hidden');
                     form.submit();
                 });
@@ -242,7 +244,7 @@
                     var form = $('<form method="post" target="_blank"/>').appendTo('body');
                     form.attr('action', sealServer + "SWExecuteReportToResult");
                     form.append($('<input />').attr('name', 'path').attr('value', "\\Samples\\07-Outputs and schedules.srex"));
-                    form.append($('<input />').attr('name', 'format').attr('value', "csv"));/* print, csv, pdf or excel with the converter */
+                    form.append($('<input />').attr('name', 'format').attr('value', "excel"));/* print, csv, pdf or excel with the converter */
                     form.children('input').attr('type', 'hidden');
                     form.submit();
                 });
@@ -300,20 +302,20 @@
                 });
 
             $("#logout_button")
-            .click(function () {
-                $.post(sealServer + "SWILogout")
-                    .done(function (data) {
-                        if (!data.error) {
-                            $("#connect_label").text("");
-                            $("#logout_label").text("Disconnected");
-                            connected = false;
-                        }
-                        else {
-                            $("#browse_detail_label").text("Error: " + data.error);
-                        }
-                        enableControls();
-                    })
-            });
+                .click(function () {
+                    $.post(sealServer + "SWILogout")
+                        .done(function (data) {
+                            if (!data.error) {
+                                $("#connect_label").text("");
+                                $("#logout_label").text("Disconnected");
+                                connected = false;
+                            }
+                            else {
+                                $("#browse_detail_label").text("Error: " + data.error);
+                            }
+                            enableControls();
+                        })
+                });
 
             $("#version_button")
                 .click(function () {
@@ -340,7 +342,7 @@
             <ul class="nav navbar-nav pull-xs-right">
                 <li class="nav-item active"><a class="nav-link" href="WebInterfaceSamples.html">Samples</a></li>
                 <li class="nav-item"><a class="nav-link" href="WebInterfaceAPI.html">API Description</a></li>
-                <li class="nav-item"><a class="nav-link" href="http://sealreport.org/" target="_blank">Seal Report Home</a></li>
+                <li class="nav-item"><a class="nav-link" href="https://sealreport.org/" target="_blank">Seal Report Home</a></li>
             </ul>
         </div><!-- /.container -->
     </nav><!-- /.navbar -->
@@ -436,7 +438,7 @@
                         </tr>
                         <tr>
                             <td>
-                                <button id="generate3_button">Generate '07-Outputs and schedules' in CSV</button>
+                                <button id="generate3_button">Generate '07-Outputs and schedules' in Excel</button>
                             </td>
                             <td width="50%"><label id="generate3_label"></label></td>
                         </tr>

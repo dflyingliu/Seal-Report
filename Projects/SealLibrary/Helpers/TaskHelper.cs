@@ -1,4 +1,8 @@
-﻿using System;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,6 +13,8 @@ using System.Diagnostics;
 using System.Data.SqlClient;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Data.Common;
+using System.Data.OleDb;
 
 namespace Seal.Helpers
 {
@@ -30,7 +36,33 @@ namespace Seal.Helpers
             get { return _task.Report; }
         }
 
-        public TaskDatabaseHelper DatabaseHelper = new TaskDatabaseHelper();
+
+        public MetaConnection TaskConnection
+        {
+            get
+            {
+                return _task.Connection;
+            }
+        }
+
+        public DbCommand GetDbCommand()
+        {
+            return _task.GetDbCommand(_task.Connection);
+        }
+
+        TaskDatabaseHelper _databaseHelper = null;
+        public TaskDatabaseHelper DatabaseHelper
+        {
+            get
+            {
+                if (_databaseHelper == null)
+                {
+                    _databaseHelper = new TaskDatabaseHelper(); ;
+                    _databaseHelper.SetDatabaseDefaultConfiguration(_task.Connection.DatabaseType);
+                }
+                return _databaseHelper;
+            }
+        }
 
         public void RefreshRepositoryEnums(string sourceName = "")
         {
@@ -151,7 +183,7 @@ namespace Seal.Helpers
                 foreach (var connection in _task.Source.Connections.Where(i => useAllConnections || i.GUID == _task.Connection.GUID))
                 {
                     if (_task.CancelReport) break;
-                    LogMessage("\r\nImporting table for connection '{0}'.", connection.Name);
+                    LogMessage("Importing table for connection '{0}'.", connection.Name);
                     DatabaseHelper.SetDatabaseDefaultConfiguration(connection.DatabaseType);
                     LogMessage("Dropping and creating table '{0}'", destinationTableName);
                     DatabaseHelper.CreateTable(_task.GetDbCommand(connection), table);
@@ -199,7 +231,7 @@ namespace Seal.Helpers
                 foreach (var connection in _task.Source.Connections.Where(i => useAllConnections || i.GUID == _task.Connection.GUID))
                 {
                     if (_task.CancelReport) break;
-                    LogMessage("\r\nImporting table for connection '{0}'.", connection.Name);
+                    LogMessage("Importing table for connection '{0}'.", connection.Name);
                     DatabaseHelper.SetDatabaseDefaultConfiguration(connection.DatabaseType);
                     LogMessage("Dropping and creating table '{0}'", destinationTableName);
                     DatabaseHelper.CreateTable(_task.GetDbCommand(connection), table);
@@ -217,31 +249,37 @@ namespace Seal.Helpers
         {
             var source = _task.Report.GetReportSource(reportSourceName);
             if (source == null) throw new Exception(string.Format("Invalid report source name: '{0}'", reportSourceName));
-            return LoadTableFromExternalSource(source.Connection.FullConnectionString, sourceSelectStatement, destinationTableName, useAllConnections, sourceCheckSelect, destinationCheckSelect);
+            return LoadTableFromExternalSource(source.Connection, sourceSelectStatement, destinationTableName, useAllConnections, sourceCheckSelect, destinationCheckSelect);
         }
 
-        public bool LoadTableFromExternalSource(string sourceConnectionString, string sourceSelectStatement, string destinationTableName, bool useAllConnections = false, string sourceCheckSelect = "", string destinationCheckSelect = "")
+        public bool LoadTableFromExternalSource(MetaConnection sourceConnection, string sourceSelectStatement, string destinationTableName, bool useAllConnections = false, string sourceCheckSelect = "", string destinationCheckSelect = "")
         {
             bool result = false;
             try
             {
-                string connectionString = _task.Repository.ReplaceRepositoryKeyword(sourceConnectionString);
                 LogMessage("Starting Loading Table using '{0}'", sourceSelectStatement);
                 DataTable table = null;
                 foreach (var connection in _task.Source.Connections.Where(i => useAllConnections || i.GUID == _task.Connection.GUID))
                 {
                     if (_task.CancelReport) break;
-                    LogMessage("\r\nImporting table for connection '{0}'.", connection.Name);
+                    LogMessage("Importing table for connection '{0}'.", connection.Name);
                     bool doIt = true;
                     if (!string.IsNullOrEmpty(sourceCheckSelect) && !string.IsNullOrEmpty(destinationCheckSelect))
                     {
                         LogMessage("Checking if load is required using '{0}' and '{1}'", sourceCheckSelect, destinationCheckSelect);
                         doIt = false;
-                        DataTable checkTable1 = DatabaseHelper.LoadDataTable(connectionString, sourceCheckSelect);
-                        if (_task.CancelReport) break;
-                        DataTable checkTable2 = DatabaseHelper.LoadDataTable(connection.FullConnectionString, destinationCheckSelect);
-                        if (_task.CancelReport) break;
-                        if (!DatabaseHelper.AreTablesIdentical(checkTable1, checkTable2)) doIt = true;
+                        try
+                        {
+                            DataTable checkTable1 = LoadDataTable(sourceConnection, sourceCheckSelect);
+                            if (_task.CancelReport) break;
+                            DataTable checkTable2 = LoadDataTable(connection, destinationCheckSelect);
+                            if (_task.CancelReport) break;
+                            if (!DatabaseHelper.AreTablesIdentical(checkTable1, checkTable2)) doIt = true;
+                        }
+                        catch
+                        {
+                            doIt = true;
+                        }
                     }
 
                     if (doIt && !_task.CancelReport)
@@ -256,7 +294,7 @@ namespace Seal.Helpers
                             {
                                 if (_task.CancelReport) break;
                                 string sql = string.Format("select * from (select ROW_NUMBER() over (order by {0}) rn, a.* from ({1}) a) b where rn > {2} and rn <= {3}", DatabaseHelper.LoadSortColumn, sourceSelect, lastIndex, lastIndex + DatabaseHelper.LoadBurstSize);
-                                table = DatabaseHelper.LoadDataTable(connectionString, sql);
+                                table = LoadDataTable(sourceConnection, sql);
                                 if (table.Rows.Count == 0) break;
 
                                 table.TableName = destinationTableName;
@@ -276,7 +314,7 @@ namespace Seal.Helpers
 
                             if (table == null)
                             {
-                                table = DatabaseHelper.LoadDataTable(connectionString, sourceSelect);
+                                table = LoadDataTable(sourceConnection, sourceSelect);
                                 table.TableName = destinationTableName;
                             }
 
@@ -332,22 +370,63 @@ namespace Seal.Helpers
             {
                 if (_task.CancelReport) break;
                 var command = _task.GetDbCommand(connection);
-                command.CommandText = sql;
-                DatabaseHelper.ExecuteCommand(command);
+                try
+                {
+                    command.CommandText = sql;
+                    DatabaseHelper.ExecuteCommand(command);
+                }
+                finally
+                {
+                    command.Connection.Close();
+                }
             }
         }
 
         public object ExecuteScalar(string sql)
         {
+            object result = null;
             var connection = _task.Source.Connections.FirstOrDefault(i => i.GUID == _task.Connection.GUID);
             if (connection != null)
             {
                 var command = _task.GetDbCommand(connection);
-                command.CommandText = sql;
-                return command.ExecuteScalar();
+                try
+                {
+                    command.CommandText = sql;
+                    result = command.ExecuteScalar();
+                }
+                finally
+                {
+                    command.Connection.Close();
+                }
+            }
+            return result;
+        }
+
+        public DataTable LoadDataTable(string sql)
+        {
+            var connection = _task.Source.Connections.FirstOrDefault(i => i.GUID == _task.Connection.GUID);
+            if (connection != null)
+            {
+                return LoadDataTable(connection, sql);
             }
             return null;
         }
+
+        public DataTable LoadDataTable(MetaConnection connection, string sql)
+        {
+            return DatabaseHelper.LoadDataTable(connection.ConnectionType, connection.FullConnectionString, sql);
+        }
+
+        public void ExecuteNonQuery(MetaConnection connection, string sql, string commandsSeparator = null)
+        {
+            DatabaseHelper.ExecuteNonQuery(connection.ConnectionType, connection.FullConnectionString, sql, commandsSeparator);
+        }
+
+        public object ExecuteScalar(MetaConnection connection, string sql)
+        {
+            return DatabaseHelper.ExecuteScalar(connection.ConnectionType, connection.FullConnectionString, sql, true);
+        }
+
 
         #region MSSQL
 
@@ -373,7 +452,7 @@ namespace Seal.Helpers
 
         string _mssqlError = "";
         int _mssqlErrorClassLevel = 11;
-        public void ExecuteMSSQLScripts(string scriptsDirectory, bool useAllConnections = false, bool stopOnError = true, int errorClassLevel = 11)
+        public void ExecuteMSSQLScripts(string scriptsDirectory, bool useAllConnections = false, bool stopOnError = true, int errorClassLevel = 11, string fileNameFilter = "")
         {
             _mssqlError = "";
             _mssqlErrorClassLevel = errorClassLevel;
@@ -381,12 +460,25 @@ namespace Seal.Helpers
             var files = Directory.GetFiles(scriptsDirectory, "*.sql");
             foreach (var file in files.OrderBy(i => i))
             {
+                if (!string.IsNullOrEmpty(fileNameFilter) && !Path.GetFileNameWithoutExtension(file).ToLower().Contains(fileNameFilter.ToLower())) continue;
+
                 LogMessage("Processing file '{0}'", file);
                 foreach (var connection in _task.Source.Connections.Where(i => useAllConnections || i.GUID == _task.Connection.GUID))
                 {
                     if (_task.CancelReport) break;
 
-                    SqlConnection conn = new SqlConnection(connection.SQLServerConnectionString);
+                    string connectionString = connection.FullConnectionString;
+                    if (connection.ConnectionType == ConnectionType.OleDb)
+                    {
+                        OleDbConnectionStringBuilder builder = new OleDbConnectionStringBuilder(connection.FullConnectionString);
+                        connectionString = string.Format("Server={0};Database={1};", builder["Data Source"], builder["Initial Catalog"]);
+                        connectionString += (builder.ContainsKey("User ID") ? string.Format("User Id={0};Password={1};", builder["User ID"], builder["Password"]) : "Trusted_Connection=True;");
+                    }
+                    else if (connection.ConnectionType == ConnectionType.Odbc)
+                    {
+                        throw new Exception("Odbc connection type not supported");
+                    }
+                    SqlConnection conn = new SqlConnection(connectionString);
                     try
                     {
                         conn.FireInfoMessageEventOnUserErrors = true;
@@ -442,7 +534,7 @@ namespace Seal.Helpers
                                 }
                             }
                         }
-                    
+
                         foreach (string commandString in commands)
                         {
                             if (!string.IsNullOrEmpty(commandString.Trim()))
@@ -473,7 +565,7 @@ namespace Seal.Helpers
 
         void MSSQLConnection_InfoMessage(object sender, SqlInfoMessageEventArgs e)
         {
-            foreach(SqlError err in e.Errors)
+            foreach (SqlError err in e.Errors)
             {
                 if (err.Class >= _mssqlErrorClassLevel)
                 {
@@ -485,7 +577,7 @@ namespace Seal.Helpers
             Thread.Sleep(20);
         }
 
-#endregion
+        #endregion
 
 
         //SANDBOX !

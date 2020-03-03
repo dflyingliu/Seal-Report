@@ -4,6 +4,8 @@
     ReportView view = Model;
     Report report = view.Report;
     Repository repository = report.Repository;
+    var restrictionPerRow = view.GetNumericValue("restrictions_per_row");
+    if  (restrictionPerRow == 0) { restrictionPerRow = 1; }
 }
 
 <!--restrictions_div-->
@@ -12,13 +14,13 @@
     <div id="restrictions_div" class="container@(view.GetBoolValue("container_fluid") ? "-fluid" : "") collapse @((report.HasRestrictions && view.GetBoolValue("restriction_button")) ? "in" : "")">
         <div class="panel-group" role="tablist">
             <!--rows of xx restrictions -->
-            @for (int row = 0; row <= report.ExecutionCommonRestrictions.Count / view.GetNumericValue("restrictions_per_row"); row++)
+            @for (int row = 0; row <= report.ExecutionCommonRestrictions.Count / restrictionPerRow; row++)
             {
                 <div class="row">
-                    @for (int i = view.GetNumericValue("restrictions_per_row") * row; i < report.ExecutionCommonRestrictions.Count && i < view.GetNumericValue("restrictions_per_row") * (row + 1); i++)
+                    @for (int i = restrictionPerRow * row; i < report.ExecutionCommonRestrictions.Count && i < restrictionPerRow * (row + 1); i++)
                     {
                         var restriction = report.ExecutionCommonRestrictions[i];
-                        <div class="col-sm-@(12 / view.GetNumericValue("restrictions_per_row"))">
+                        <div class="col-sm-@(12 / restrictionPerRow)">
                             <div class="form-group">
                                 <select name="@restriction.OperatorHtmlId" id="@restriction.OperatorHtmlId" class="form-control operator_select" style="display:@(restriction.HasOperator ? "inline" : "none");">
                                     @foreach (Operator op in restriction.AllowedDisplayOperators)
@@ -31,11 +33,10 @@
                                 </select>
                                 @if (restriction.IsEnumRE)
                                 {
-                                    <select name="@(restriction.OptionValueHtmlId)" id="@(restriction.OptionValueHtmlId)" opid="@restriction.OperatorHtmlId" class="form-control enum" @(restriction.Prompt == PromptType.PromptOneValue ? "" : "multiple")>
-                                        @for (int j = 0; j < restriction.EnumRE.Values.Count; j++)
+                                    <select name="@(restriction.OptionValueHtmlId)" id="@(restriction.OptionValueHtmlId)" opid="@restriction.OperatorHtmlId" class="form-control enum @(restriction.EnumRE.HasDynamicDisplay ? "enum_dynamic"  :"")" @(restriction.Prompt == PromptType.PromptOneValue ? "" : "multiple") dependencies="@restriction.EnumRE.HasDependencies"  filterchars="@restriction.EnumRE.FilterChars" message="@Raw(restriction.GetEnumMessage())">
+                                        @foreach (var enumDef in restriction.PromptedEnumValues)
                                         {
-                                            var enumDef = restriction.EnumRE.Values[j];
-                                            <option id='@(restriction.OptionHtmlId + j.ToString())' value='@(restriction.OptionHtmlId + j.ToString())' @(restriction.EnumValues.Contains(enumDef.Id) ? "selected" : "")>@Raw(Helper.ToHtml(restriction.GetEnumDisplayValue(enumDef.Id)))</option>
+                                            <option id='@(restriction.OptionHtmlId + enumDef.HtmlId)' value='@(restriction.OptionHtmlId + enumDef.HtmlId)' @(restriction.EnumValues.Contains(enumDef.Id) ? "selected" : "")>@Raw(Helper.ToHtml(restriction.GetEnumDisplayValue(enumDef.Id)))</option>
                                         }
                                     </select>
                                 }
@@ -62,7 +63,7 @@
                                         {
                                             <input type='text' class="form-control @(restriction.IsNumeric ? "numeric_input" : "")" name="@string.Format("{0}_{1}", restriction.ValueHtmlId, j)" id="@string.Format("{0}_{1}", restriction.ValueHtmlId, j)" opid="@restriction.OperatorHtmlId" value="@restriction.GetHtmlValue(j)" />
                                         }
-                                        if (restriction.Prompt == PromptType.PromptOneValue)
+                                        if ((restriction.Prompt == PromptType.PromptOneValue) || (restriction.Prompt == PromptType.PromptTwoValues && j == 2))
                                         {
                                             break;
                                         }

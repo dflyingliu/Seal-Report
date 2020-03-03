@@ -15,12 +15,16 @@
     string chartId = "cpl" + Guid.NewGuid().ToString().Replace("-", "");
     if (modelView.InitPageChart(page))
     {
-        <div id="@chartId" style="@Helper.AddIfNotEmpty("width:", view.GetValue("plotly_width"), ";")@Helper.AddIfNotEmpty("height:", view.GetValue("plotly_height"), ";")"></div>
+        <div id="@chartId" style="page-break-inside:avoid; @Helper.AddIfNotEmpty("width:", view.GetValue("plotly_width"), ";")@Helper.AddIfNotEmpty("height:", view.GetValue("plotly_height"), ";")"></div>
 
         <script>
             $(document).ready(function () {
-                var colors = d3.scale.category@((reportModel.ExecChartJSType == "pie" || reportModel.ExecChartJSType == "polarArea" ? page.PrimaryXDimensions.Count : page.Series.Count) <= 10 ? "1" : "2")0().range();
-                colors = @Raw(view.GetValue("plotly_colors") != "d3" ? view.GetValue("plotly_colors") : "colors");
+                var colorsDef = "@view.GetValue("plotly_colors")";
+                var colors = null;
+                if (colorsDef == "d3") colors = d3.scale.category@((reportModel.ExecChartJSType == "pie" || reportModel.ExecChartJSType == "polarArea" ? page.PrimaryXDimensions.Count : page.Series.Count) <= 10 ? "1" : "2")0().range();
+                else if (colorsDef == "d3b") colors = d3.scale.category20b().range();
+                else if (colorsDef == "d3c") colors = d3.scale.category20c().range(); 
+                else colors = @Raw(view.GetValue("plotly_colors"));
 
                 var @chartId = $("#@chartId")[0];
                 var data = [
@@ -68,8 +72,8 @@
                     var total = data[0].values.reduce(function (a, b) { return a + b; });
                     var text = data[0].values.map(function (v, i) {
                         var valStr = "";
-                        if (@Helper.ToJS(reportModel.ExecAxisPrimaryYIsDateTime)) valStr = d3.time.format('@reportModel.ExecD3PrimaryYAxisFormat')(new Date(v));
-                        else valStr = d3.format('@reportModel.ExecD3PrimaryYAxisFormat')(v).valueFormat() + '<br>' + d3.format('@reportModel.ExecD3PrimaryYAxisFormat')(v / total * 100).valueFormat() + '%';
+                        if (@Helper.ToJS(reportModel.ExecAxisPrimaryYIsDateTime)) valStr = d3.timeFormat('@Raw(Helper.ToJS(reportModel.ExecD3PrimaryYAxisFormat))')(new Date(v));
+                        else valStr = d3.format('@Raw(Helper.ToJS(reportModel.ExecD3PrimaryYAxisFormat))')(v).valueFormat() + '<br>' + d3.format('Raw(Helper.ToJS(@reportModel.ExecD3PrimaryYAxisFormat))')(v / total * 100).valueFormat() + '%';
                         return data[0].labels[i] + '<br>' + valStr;
                     });
                     data[0].text = text;
@@ -82,19 +86,19 @@
                     title: '@Raw(Helper.ToJS(modelView.GetTranslatedMappedLabel(view.GetValue("plotly_title"))))',
                     xaxis: {
                         title: '@Raw(Helper.ToJS(modelView.GetTranslatedMappedLabel(view.GetValue("plotly_xaxis_title"))))',
-                        tickformat: '@(reportModel.ExecPlotlyChartType == "bar" && @view.GetValue("plotly_bar_orientation") == "h" ? reportModel.ExecD3PrimaryYAxisFormat : reportModel.ExecD3XAxisFormat)',
+                        tickformat: '@Raw(Helper.ToJS((reportModel.ExecPlotlyChartType == "bar" && @view.GetValue("plotly_bar_orientation") == "h" ? reportModel.ExecD3PrimaryYAxisFormat : reportModel.ExecD3XAxisFormat)))',
                     },
                     yaxis: {
                         title: '@Raw(Helper.ToJS(modelView.GetTranslatedMappedLabel(view.GetValue("plotly_yaxis_title"))))',
-                        tickformat: '@(reportModel.ExecPlotlyChartType == "bar" && @view.GetValue("plotly_bar_orientation") == "h" ? reportModel.ExecD3XAxisFormat : reportModel.ExecD3PrimaryYAxisFormat)',
+                        tickformat: '@Raw(Helper.ToJS((reportModel.ExecPlotlyChartType == "bar" && @view.GetValue("plotly_bar_orientation") == "h" ? reportModel.ExecD3XAxisFormat : reportModel.ExecD3PrimaryYAxisFormat)))',
                     },
                     yaxis2: {
                         title: '@Raw(Helper.ToJS(modelView.GetTranslatedMappedLabel(view.GetValue("plotly_yaxis2_title"))))',
-                        tickformat: '@reportModel.ExecD3SecondaryYAxisFormat',
+                        tickformat: '@Raw(Helper.ToJS(reportModel.ExecD3SecondaryYAxisFormat))',
                         overlaying: 'y',
                         side:'right',
                     },
-                    showlegend: @Helper.ToJS(view.GetBoolValue("plotly_show_legend")),
+                    showlegend: @view.GetBoolValueJS("plotly_show_legend"),
                     legend: {
                         @Raw(Helper.AddIfNotEmpty("",view.GetValue("plotly_legend_position"),","))
                         orientation: "@view.GetValue("plotly_legend_orientation")"
@@ -122,19 +126,22 @@
 
                 Plotly.plot(@chartId,
                     data,
-                    layout
+                    layout,
+                    { locale: 'fr' }
                     );
 
-                (@chartId).on('plotly_click', function (data) {
-                    if (data.points.length > 0) {
-                        var idx = data.points[0].i;
-                        if (!idx) idx = (@chartId).data[0].x.indexOf(data.points[0].x);
-                        if (idx && idx != -1) {
-                           var nav = @(chartId).layout.navigations[idx];
-                           if (nav) showPopupNavMenu(data.event, nav, true);
+                if (@Helper.ToJS(report.GenerateHTMLDisplay)) {
+                    (@chartId).on('plotly_click', function (data) {
+                        if (data.points.length > 0) {
+                            var idx = data.points[0].i;
+                            if (!idx) idx = (@chartId).data[0].x.indexOf(data.points[0].x);
+                            if (idx && idx != -1) {
+                                var nav = @(chartId).layout.navigations[idx];
+                                if (nav) showPopupNavMenu(data.event, nav, true, '@report.ExecutionGUID');
+                            }
                         }
-                    }
-                });
+                    });
+                }
 
                 $(window).on('resize', function () {
                     Plotly.Plots.resize(@chartId);

@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
 using System.Threading;
+using Seal.Helpers;
+using System.Reflection;
 
 namespace Seal
 {
@@ -16,7 +18,7 @@ namespace Seal
         /// The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             // Add the event handler for handling UI thread exceptions to the event.
             Application.ThreadException += new ThreadExceptionEventHandler(ExceptionHandler);
@@ -36,6 +38,7 @@ namespace Seal
             try
             {
                 result = MessageBox.Show(t.Exception.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Helper.WriteLogEntry("Server Manager", System.Diagnostics.EventLogEntryType.Error, t.Exception.Message + "\r\n" + t.Exception.StackTrace);
             }
             catch
             {

@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -28,6 +28,8 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <DocumentationFile>bin\Debug\SealLibrary.xml</DocumentationFile>
+    <NoWarn>1591</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
     <OutputPath>bin\Release\</OutputPath>
@@ -37,16 +39,23 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <NoWarn>1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Ionic.Zip, Version=1.9.1.8, Culture=neutral, PublicKeyToken=edbe51ad942a3f5c, processorArchitecture=MSIL">
       <HintPath>..\packages\Ionic.Zip.1.9.1.8\lib\Ionic.Zip.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="jose-jwt, Version=2.4.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\jose-jwt.2.5.0\lib\net40\jose-jwt.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="Microsoft.VisualBasic" />
-    <Reference Include="Microsoft.Win32.TaskScheduler, Version=2.8.4.0, Culture=neutral, PublicKeyToken=c416bc1b32d97233, processorArchitecture=MSIL">
-      <HintPath>..\packages\TaskScheduler.2.8.4\lib\net40\Microsoft.Win32.TaskScheduler.dll</HintPath>
+    <Reference Include="Microsoft.Win32.TaskScheduler, Version=2.8.18.0, Culture=neutral, PublicKeyToken=c416bc1b32d97233, processorArchitecture=MSIL">
+      <HintPath>..\packages\TaskScheduler.2.8.18\lib\net40\Microsoft.Win32.TaskScheduler.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="RazorEngine, Version=3.10.0.0, Culture=neutral, PublicKeyToken=9ee697374c7e744a, processorArchitecture=MSIL">
@@ -72,8 +81,9 @@
     <Reference Include="System.Security" />
     <Reference Include="System.ServiceModel" />
     <Reference Include="System.Web" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Web.Razor, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.Razor.3.2.6\lib\net45\System.Web.Razor.dll</HintPath>
+      <HintPath>..\packages\Microsoft.AspNet.Razor.3.2.7\lib\net45\System.Web.Razor.dll</HintPath>
     </Reference>
     <Reference Include="System.Windows.Forms">
       <EmbedInteropTypes>False</EmbedInteropTypes>
@@ -84,6 +94,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Converter\DashboardFolderConverter.cs" />
+    <Compile Include="Converter\WidgetIconClassConverter.cs" />
+    <Compile Include="Converter\WidgetColorClassConverter.cs" />
     <Compile Include="Converter\RestrictionDateConverter.cs" />
     <Compile Include="Converter\RepositoryFolderConverter.cs" />
     <Compile Include="Converter\CultureInfoConverter.cs" />
@@ -91,6 +104,10 @@
     <Compile Include="Converter\ReportViewConverter.cs" />
     <Compile Include="Converter\ViewParameterEnumConverter.cs" />
     <Compile Include="Converter\CultureNameConverter.cs" />
+    <Compile Include="Forms\PartialTemplatesEditor.cs" />
+    <Compile Include="Helpers\HelperForms.cs" />
+    <Compile Include="Model\Audit.cs" />
+    <Compile Include="Model\EditorTableDefinition.cs" />
     <Compile Include="Forms\AboutBoxForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -99,7 +116,9 @@
     </Compile>
     <Compile Include="Forms\ConnectionCollectionEditor.cs" />
     <Compile Include="Forms\ConnectionStringEditor.cs" />
+    <Compile Include="Forms\FormHelper.cs" />
     <Compile Include="Forms\InformationErrorUITypeEditor.cs" />
+    <Compile Include="Forms\JoinsValuesEditor.cs" />
     <Compile Include="Forms\SmartCopyForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -131,7 +150,7 @@
     <Compile Include="Forms\ExecutionForm.Designer.cs">
       <DependentUpon>ExecutionForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Forms\ExecutionInterface.cs" />
+    <Compile Include="Model\ExecutionInterface.cs" />
     <Compile Include="Forms\HelperEditor.cs" />
     <Compile Include="Forms\EnumValueCollectionEditor.cs" />
     <Compile Include="Converter\RestrictionOperatorConverter.cs" />
@@ -173,8 +192,6 @@
     <Compile Include="DynamicTypeDescriptor\StandardValueEditorUI.designer.cs">
       <DependentUpon>StandardValueEditorUI.cs</DependentUpon>
     </Compile>
-    <Compile Include="Forms\TasksFolder.cs" />
-    <Compile Include="Forms\ViewFolder.cs" />
     <Compile Include="Helpers\CryptoHelper.cs" />
     <Compile Include="Helpers\ExcelHelper.cs" />
     <Compile Include="Helpers\Impersonator.cs" />
@@ -184,6 +201,9 @@
     <Compile Include="Helpers\FileHelper.cs" />
     <Compile Include="Helpers\Helper.cs" />
     <Compile Include="Model\CategoryFolder.cs" />
+    <Compile Include="Model\DashboardItem.cs" />
+    <Compile Include="Model\Dashboard.cs" />
+    <Compile Include="Model\DashboardWidgetsPool.cs" />
     <Compile Include="Model\Navigation.cs" />
     <Compile Include="Model\NavigationContext.cs" />
     <Compile Include="Model\NavigationLink.cs" />
@@ -205,6 +225,9 @@
     <Compile Include="Model\SealPdfConverter.cs" />
     <Compile Include="Model\SealSecurity.cs" />
     <Compile Include="Model\CommonScript.cs" />
+    <Compile Include="Model\SecurityDashboardFolder.cs" />
+    <Compile Include="Model\SecurityUserProfile.cs" />
+    <Compile Include="Model\SecurityWidget.cs" />
     <Compile Include="Model\SecuritySource.cs" />
     <Compile Include="Model\SecurityDevice.cs" />
     <Compile Include="Model\SecurityConnection.cs" />
@@ -241,6 +264,7 @@
     <Compile Include="Model\ResultTotalCell.cs" />
     <Compile Include="Model\RootComponent.cs" />
     <Compile Include="Model\WebInterfaceModels.cs" />
+    <Compile Include="Model\DashboardWidget.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
@@ -296,6 +320,12 @@
     </None>
     <None Include="..\..\Repository\Views\ChartJS.cshtml">
       <Link>Views\ChartJS.cshtml</Link>
+    </None>
+    <None Include="..\..\Repository\Views\KPI.config.cshtml">
+      <Link>Views\KPI.config.cshtml</Link>
+    </None>
+    <None Include="..\..\Repository\Views\KPI.cshtml">
+      <Link>Views\KPI.cshtml</Link>
     </None>
     <None Include="..\..\Repository\Views\Model.iCSV.partial.cshtml">
       <Link>Views\Model.iCSV.partial.cshtml</Link>
@@ -357,11 +387,16 @@
     <None Include="..\..\Repository\Views\Scripts\chartNVD3.js">
       <Link>Views\Scripts\chartNVD3.js</Link>
     </None>
+    <None Include="..\..\Repository\Views\Scripts\helpers.js">
+      <Link>Views\Scripts\common.js</Link>
+    </None>
     <None Include="..\..\Repository\Views\Content\seal.css">
       <Link>Views\Content\seal.css</Link>
     </None>
+    <None Include="CD-Dashboard.cd" />
+    <None Include="CD-Data Source.cd" />
     <None Include="packages.config" />
-    <None Include="Result.cd" />
+    <None Include="CD-Report Model.cd" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Forms\AboutBoxForm.resx">
@@ -440,8 +475,8 @@
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
-    <None Include="Overview.cd" />
-    <None Include="Repository.cd" />
+    <None Include="CD-Report.cd" />
+    <None Include="CD-Security.cd" />
     <None Include="Resources\checkedRed.png" />
     <None Include="Resources\checkedGreen.png" />
     <None Include="Resources\helper.png" />
@@ -462,6 +497,7 @@
   <PropertyGroup>
     <PostBuildEvent>copy "$(ProjectDir)..\..\Repository\Views\Scripts\common.js" "$(ProjectDir)..\SealWebServer\Scripts\"
 copy "$(ProjectDir)..\..\Repository\Views\Scripts\chartNVD3.js" "$(ProjectDir)..\SealWebServer\Scripts\"
+copy "$(ProjectDir)..\..\Repository\Views\Scripts\helpers.js" "$(ProjectDir)..\SealWebServer\Scripts\"
 copy "$(ProjectDir)..\..\Repository\Views\Content\seal.css" "$(ProjectDir)..\SealWebServer\Content\"
 </PostBuildEvent>
   </PropertyGroup>

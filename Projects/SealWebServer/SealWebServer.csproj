@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\TypeScript\Microsoft.TypeScript.Default.props" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\TypeScript\Microsoft.TypeScript.Default.props')" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -23,16 +23,16 @@
     <IISExpressUseClassicPipelineMode />
     <TargetFrameworkProfile />
     <UseGlobalApplicationHostFile />
-    <TypeScriptToolsVersion>2.2</TypeScriptToolsVersion>
+    <TypeScriptToolsVersion>3.7</TypeScriptToolsVersion>
     <Use64BitIISExpress />
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
-    <Reference Include="Microsoft.Win32.TaskScheduler, Version=2.8.4.0, Culture=neutral, PublicKeyToken=c416bc1b32d97233, processorArchitecture=MSIL">
-      <HintPath>..\packages\TaskScheduler.2.8.4\lib\net40\Microsoft.Win32.TaskScheduler.dll</HintPath>
+    <Reference Include="Microsoft.Win32.TaskScheduler, Version=2.8.18.0, Culture=neutral, PublicKeyToken=c416bc1b32d97233, processorArchitecture=MSIL">
+      <HintPath>..\packages\TaskScheduler.2.8.18\lib\net40\Microsoft.Win32.TaskScheduler.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.11.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
+    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.12.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="RazorEngine, Version=3.10.0.0, Culture=neutral, PublicKeyToken=9ee697374c7e744a, processorArchitecture=MSIL">
       <HintPath>..\packages\RazorEngine.3.10.0\lib\net45\RazorEngine.dll</HintPath>
@@ -48,8 +48,8 @@
       <HintPath>..\packages\Microsoft.Net.Http.2.2.29\lib\net45\System.Net.Http.Extensions.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="System.Net.Http.Formatting, Version=5.2.6.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.WebApi.Client.5.2.6\lib\net45\System.Net.Http.Formatting.dll</HintPath>
+    <Reference Include="System.Net.Http.Formatting, Version=5.2.7.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.AspNet.WebApi.Client.5.2.7\lib\net45\System.Net.Http.Formatting.dll</HintPath>
     </Reference>
     <Reference Include="System.Net.Http.Primitives, Version=4.2.29.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Net.Http.2.2.29\lib\net45\System.Net.Http.Primitives.dll</HintPath>
@@ -64,31 +64,30 @@
     <Reference Include="System.Web.Abstractions" />
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Web.Helpers, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.6\lib\net45\System.Web.Helpers.dll</HintPath>
+      <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.7\lib\net45\System.Web.Helpers.dll</HintPath>
     </Reference>
-    <Reference Include="System.Web.Http, Version=5.2.6.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.WebApi.Core.5.2.6\lib\net45\System.Web.Http.dll</HintPath>
+    <Reference Include="System.Web.Http, Version=5.2.7.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.AspNet.WebApi.Core.5.2.7\lib\net45\System.Web.Http.dll</HintPath>
     </Reference>
-    <Reference Include="System.Web.Http.WebHost, Version=5.2.6.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.WebApi.WebHost.5.2.6\lib\net45\System.Web.Http.WebHost.dll</HintPath>
+    <Reference Include="System.Web.Http.WebHost, Version=5.2.7.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.AspNet.WebApi.WebHost.5.2.7\lib\net45\System.Web.Http.WebHost.dll</HintPath>
     </Reference>
-    <Reference Include="System.Web.Mvc, Version=5.2.6.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.Mvc.5.2.6\lib\net45\System.Web.Mvc.dll</HintPath>
+    <Reference Include="System.Web.Mvc, Version=5.2.7.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.AspNet.Mvc.5.2.7\lib\net45\System.Web.Mvc.dll</HintPath>
     </Reference>
     <Reference Include="System.Web.Razor, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.Razor.3.2.6\lib\net45\System.Web.Razor.dll</HintPath>
+      <HintPath>..\packages\Microsoft.AspNet.Razor.3.2.7\lib\net45\System.Web.Razor.dll</HintPath>
     </Reference>
     <Reference Include="System.Web.Routing" />
     <Reference Include="System.Web.WebPages, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.6\lib\net45\System.Web.WebPages.dll</HintPath>
+      <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.7\lib\net45\System.Web.WebPages.dll</HintPath>
     </Reference>
     <Reference Include="System.Web.WebPages.Deployment, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.6\lib\net45\System.Web.WebPages.Deployment.dll</HintPath>
+      <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.7\lib\net45\System.Web.WebPages.Deployment.dll</HintPath>
     </Reference>
     <Reference Include="System.Web.WebPages.Razor, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.6\lib\net45\System.Web.WebPages.Razor.dll</HintPath>
+      <HintPath>..\packages\Microsoft.AspNet.WebPages.3.2.7\lib\net45\System.Web.WebPages.Razor.dll</HintPath>
     </Reference>
-    <Reference Include="System.Windows.Forms.DataVisualization" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Web.Services" />
@@ -101,7 +100,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Controllers\HomeController.cs" />
+    <Compile Include="Controllers\HomeControllerNET.cs" />
     <Compile Include="Controllers\HomeControllerSWI.cs" />
+    <Compile Include="Controllers\WebHelper.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
     </Compile>
@@ -113,49 +114,70 @@
     <Compile Include="App_Start\RouteConfig.cs" />
     <Compile Include="App_Start\WebApiConfig.cs" />
     <Content Include="Content\32px.png" />
-    <Content Include="Content\bootstrap-select.min.css" />
+    <Content Include="Content\Bootstrap-3.3.7\fonts\glyphicons-halflings-regular.eot" />
+    <Content Include="Content\Bootstrap-3.3.7\fonts\glyphicons-halflings-regular.svg" />
+    <Content Include="Content\Bootstrap-3.3.7\fonts\glyphicons-halflings-regular.ttf" />
+    <Content Include="Content\Bootstrap-3.3.7\fonts\glyphicons-halflings-regular.woff" />
+    <Content Include="Content\Bootstrap-3.3.7\fonts\glyphicons-halflings-regular.woff2" />
+    <Content Include="Content\font-awesome.min.css" />
+    <Content Include="Content\datatables.min.css" />
     <Content Include="Content\font-awesome.min.css" />
     <Content Include="Content\jstree-style.min.css" />
+    <Content Include="Content\bootstrap-select.min.css" />
+    <Content Include="Content\bootstrap-datetimepicker.min.css" />
     <Content Include="Content\SealWeb.css" />
-    <Content Include="Content\throbber.gif" />
     <Content Include="Content\nv.d3.min.css" />
+    <Content Include="Content\throbber.gif" />
     <Content Include="Fonts\fontawesome-webfont.svg" />
-    <Content Include="Fonts\glyphicons-halflings-regular.svg" />
     <Content Include="Global.asax" />
     <Content Include="Images\favicon.ico" />
+    <Content Include="Images\faviconWebServer.ico" />
     <Content Include="Images\logo.png" />
+    <Content Include="Scripts\dataTables.min.js" />
     <Content Include="Scripts\bootstrap-select.min.js" />
-    <Content Include="Scripts\common.js" />
-    <Content Include="Scripts\d3.min.js" />
-    <Content Include="Scripts\Images\animated-overlay.gif" />
-    <Content Include="Scripts\Images\ui-bg_diagonals-thick_18_b81900_40x40.png" />
-    <Content Include="Scripts\Images\ui-bg_diagonals-thick_20_666666_40x40.png" />
-    <Content Include="Scripts\Images\ui-bg_flat_0_aaaaaa_40x100.png" />
-    <Content Include="Scripts\Images\ui-bg_flat_10_000000_40x100.png" />
-    <Content Include="Scripts\Images\ui-bg_flat_75_ffffff_40x100.png" />
-    <Content Include="Scripts\Images\ui-bg_glass_100_f6f6f6_1x400.png" />
-    <Content Include="Scripts\Images\ui-bg_glass_100_fdf5ce_1x400.png" />
-    <Content Include="Scripts\Images\ui-bg_glass_55_fbf9ee_1x400.png" />
-    <Content Include="Scripts\Images\ui-bg_glass_65_ffffff_1x400.png" />
-    <Content Include="Scripts\Images\ui-bg_glass_75_dadada_1x400.png" />
-    <Content Include="Scripts\Images\ui-bg_glass_75_e6e6e6_1x400.png" />
-    <Content Include="Scripts\Images\ui-bg_glass_95_fef1ec_1x400.png" />
-    <Content Include="Scripts\Images\ui-bg_gloss-wave_35_f6a828_500x100.png" />
-    <Content Include="Scripts\Images\ui-bg_highlight-soft_100_eeeeee_1x100.png" />
-    <Content Include="Scripts\Images\ui-bg_highlight-soft_75_cccccc_1x100.png" />
-    <Content Include="Scripts\Images\ui-bg_highlight-soft_75_ffe45c_1x100.png" />
-    <Content Include="Scripts\Images\ui-icons_222222_256x240.png" />
-    <Content Include="Scripts\Images\ui-icons_228ef1_256x240.png" />
-    <Content Include="Scripts\Images\ui-icons_2e83ff_256x240.png" />
-    <Content Include="Scripts\Images\ui-icons_454545_256x240.png" />
-    <Content Include="Scripts\Images\ui-icons_888888_256x240.png" />
-    <Content Include="Scripts\Images\ui-icons_cd0a0a_256x240.png" />
-    <Content Include="Scripts\Images\ui-icons_ef8c08_256x240.png" />
-    <Content Include="Scripts\Images\ui-icons_ffd27a_256x240.png" />
-    <Content Include="Scripts\Images\ui-icons_ffffff_256x240.png" />
+    <Content Include="Scripts\moment.min.js" />
+    <Content Include="Scripts\i18n\moment.de.js" />
+    <Content Include="Scripts\i18n\moment.es.js" />
+    <Content Include="Scripts\i18n\moment.fr.js" />
+    <Content Include="Scripts\i18n\moment.nl.js" />
+    <Content Include="Scripts\i18n\moment.pt.js" />
+    <Content Include="Scripts\i18n\moment.it.js" />
+    <Content Include="Scripts\i18n\selectpicker.de.min.js" />
+    <Content Include="Scripts\i18n\selectpicker.es.min.js" />
+    <Content Include="Scripts\i18n\selectpicker.fr.min.js" />
+    <Content Include="Scripts\i18n\selectpicker.it.min.js" />
+    <Content Include="Scripts\i18n\selectpicker.nl.min.js" />
+    <Content Include="Scripts\i18n\selectpicker.pt.min.js" />
+    <Content Include="Scripts\bootstrap-datetimepicker.min.js" />
+    <Content Include="Scripts\datetime-moment.js" />
+    <Content Include="Scripts\web-animations.min.js" />
+    <Content Include="Scripts\hammer.min.js" />
+    <Content Include="Scripts\muuri.min.js" />
+    <Content Include="Scripts\helpers.js" />
     <Content Include="Scripts\jstree.min.js" />
+    <Content Include="Scripts\d3.min.js" />
+    <Content Include="Scripts\d3-time.v1.min.js" />
+    <Content Include="Scripts\d3-time-format.v2.min.js" />
+    <Content Include="Scripts\d3\de.js" />
+    <Content Include="Scripts\d3\es.js" />
+    <Content Include="Scripts\d3\fr.js" />
+    <Content Include="Scripts\d3\it.js" />
+    <Content Include="Scripts\d3\nl.js" />
+    <Content Include="Scripts\d3\pt.js" />
     <Content Include="Scripts\nv.d3.min.js" />
     <Content Include="Scripts\chartNVD3.js" />
+    <Content Include="Scripts\Chart.min.js" />
+    <Content Include="Scripts\plotly-latest.min.js" />
+    <Content Include="Scripts\plotly\plotly-locale-de.js" />
+    <Content Include="Scripts\plotly\plotly-locale-es.js" />
+    <Content Include="Scripts\plotly\plotly-locale-fr.js" />
+    <Content Include="Scripts\plotly\plotly-locale-it.js" />
+    <Content Include="Scripts\plotly\plotly-locale-nl.js" />
+    <Content Include="Scripts\plotly\plotly-locale-pt.js" />
+    <Content Include="Scripts\swi-utils.js" />
+    <Content Include="Scripts\swi-gateway.js" />
+    <Content Include="Scripts\swi-dashboard.js" />
+    <Content Include="Scripts\swi-main.js" />
     <Content Include="Web.config">
       <SubType>Designer</SubType>
     </Content>
@@ -186,6 +208,7 @@
   </ItemGroup>
   <ItemGroup>
     <TypeScriptCompile Include="Scripts\swi-main.ts" />
+    <TypeScriptCompile Include="Scripts\swi-dashboard.ts" />
     <TypeScriptCompile Include="Scripts\swi-gateway.ts" />
     <TypeScriptCompile Include="Scripts\swi-utils.ts" />
     <TypeScriptCompile Include="Scripts\typings\bootstrap\index.d.ts" />
@@ -202,10 +225,9 @@
     <Content Include="Fonts\fontawesome-webfont.woff" />
     <Content Include="Fonts\fontawesome-webfont.woff2" />
     <Content Include="Fonts\FontAwesome.otf" />
-    <Content Include="Fonts\glyphicons-halflings-regular.eot" />
-    <Content Include="Fonts\glyphicons-halflings-regular.ttf" />
-    <Content Include="Fonts\glyphicons-halflings-regular.woff" />
-    <Content Include="Fonts\glyphicons-halflings-regular.woff2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Views\Home\Menu.cshtml" />
   </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
@@ -220,20 +242,36 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
+    <TypeScriptTarget>ES5</TypeScriptTarget>
+    <TypeScriptJSXEmit>None</TypeScriptJSXEmit>
+    <TypeScriptModuleKind />
+    <TypeScriptCompileOnSaveEnabled>True</TypeScriptCompileOnSaveEnabled>
+    <TypeScriptNoImplicitAny>False</TypeScriptNoImplicitAny>
+    <TypeScriptRemoveComments>False</TypeScriptRemoveComments>
+    <TypeScriptOutFile />
+    <TypeScriptOutDir />
+    <TypeScriptGeneratesDeclarations>False</TypeScriptGeneratesDeclarations>
+    <TypeScriptNoEmitOnError>True</TypeScriptNoEmitOnError>
+    <TypeScriptSourceMap>False</TypeScriptSourceMap>
+    <TypeScriptMapRoot />
+    <TypeScriptSourceRoot />
+    <DocumentationFile>bin\SealWebServer.xml</DocumentationFile>
+    <NoWarn>1591</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
-    <OutputPath>bin\x86\Release</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE;MINIFIED</DefineConstants>
     <Optimize>true</Optimize>
     <DebugType>pdbonly</DebugType>
     <PlatformTarget>x86</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
+    <NoWarn>1591</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <DebugSymbols>true</DebugSymbols>
-    <OutputPath>bin\x64\Debug</OutputPath>
+    <OutputPath>bin\</OutputPath>
     <DefineConstants>TRACE;DEBUG</DefineConstants>
     <DebugType>full</DebugType>
     <PlatformTarget>x64</PlatformTarget>
@@ -241,8 +279,8 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
-    <OutputPath>bin\x64\Release</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE;MINIFIED</DefineConstants>
     <Optimize>true</Optimize>
     <DebugType>pdbonly</DebugType>
     <PlatformTarget>x64</PlatformTarget>

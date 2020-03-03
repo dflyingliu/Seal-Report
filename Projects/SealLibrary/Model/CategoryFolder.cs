@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -8,7 +8,6 @@ using System.Linq;
 using System.Text;
 using System.ComponentModel;
 using System.Xml.Serialization;
-using Seal.Converter;
 using DynamicTypeDescriptor;
 using Seal.Helpers;
 using System.Drawing.Design;
@@ -16,6 +15,9 @@ using Seal.Forms;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// Helper to change the category folder of elements
+    /// </summary>
     public class CategoryFolder : RootComponent
     {
         #region Editor
@@ -36,29 +38,20 @@ namespace Seal.Model
                 TypeDescriptor.Refresh(this);
             }
         }
-        #endregion
 
-        string _path;
-        [DisplayName("Path"), Description("The full path of the of the category. This can be modified to change globally all the category names of the columns. The category path can be specified using the '/' character (e.g. '/Master/Name1/Name2')"), Category("Helpers"), Id(1,1)]
-        public string Path
-        {
-            get { return _path; }
-            set { _path = value; }
-        }
+        /// <summary>
+        /// The full path of the of the category. This can be modified to change globally all the category names of the columns. The category path can be specified using the '/' character (e.g. '/Master/Name1/Name2')
+        /// </summary>
+        [DisplayName("Path"), Description("The full path of the of the category. This can be modified to change globally all the category names of the columns. The category path can be specified using the '/' character (e.g. '/Master/Name1/Name2')"), Category("Helpers"), Id(1, 1)]
+        public string Path { get; set; }
 
-        #region Helpers
-        string _information;
         [DisplayName("Information"), Description("Last information"), Category("Helpers"), Id(2, 1)]
         [EditorAttribute(typeof(InformationUITypeEditor), typeof(UITypeEditor))]
-        public string Information
-        {
-            get { return _information; }
-            set { _information = value; }
-        }
+        public string Information { get; set; }
 
         public void SetInformation(string information)
         {
-            _information = information;
+            Information = information;
             UpdateEditorAttributes();
         }
 

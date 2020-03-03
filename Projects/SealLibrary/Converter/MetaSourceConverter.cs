@@ -1,17 +1,14 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.ComponentModel;
 using Seal.Model;
 using System.Globalization;
-using Seal.Helpers;
 
-namespace Seal.Converter
+namespace Seal.Forms
 {
     public class MetaSourceConverter : StringConverter
     {
@@ -30,10 +27,16 @@ namespace Seal.Converter
             var component = context.Instance as ReportComponent;
             if (component != null)
             {
-                choices = (from s in component.Report.Sources select s.Name).ToArray();
+                //No SQL Source are not allowed for SQL Model
+                bool useNoSQL = true;
+                if (context.Instance is ReportModel)
+                {
+                    if (((ReportModel)context.Instance).IsSQLModel) useNoSQL = false;
+                }
+                choices = (from s in component.Report.Sources.Where(i => (i.IsNoSQL && useNoSQL) || !i.IsNoSQL) select s.Name).ToArray();
             }
 
-            return new StandardValuesCollection(choices);
+            return new StandardValuesCollection(choices.OrderBy(i => i).ToList());
         }
 
         public override bool CanConvertTo(ITypeDescriptorContext context, Type destType)

@@ -1,19 +1,12 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.ComponentModel;
 using System.Windows.Forms;
 using Seal.Model;
-using System.Data.OleDb;
-using System.Data;
-using System.Drawing;
 using Seal.Helpers;
-using System.Collections;
 
 namespace Seal.Forms
 {
@@ -40,7 +33,6 @@ namespace Seal.Forms
                 if (((MetaSource)SelectedEntity).MetaData.MasterTable != null)
                 {
                     if (!((MetaSource)SelectedEntity).MetaData.MasterTable.IsSQL) AddHelperButton("Edit Master Load Script", "Edit the default load script", Keys.F12);
-                    else AddHelperButton("Edit Master SQL", "Edit the select SQL Statement of the master table", Keys.F8);
                 }
                 AddHelperButton("Check connection", "Check the current database connection", Keys.F7);
             }
@@ -57,7 +49,7 @@ namespace Seal.Forms
                     button.Enabled = ((MetaTable)SelectedEntity).DynamicColumns;
                 }
 
-                if (((MetaTable)SelectedEntity).IsSQL) AddHelperButton("Edit SQL", "Edit the select SQL Statement", Keys.F8);
+                if (((MetaTable)SelectedEntity).IsSQL) AddHelperButton("Edit SQL", "Edit the SQL Select Statement", Keys.F8);
                 else AddHelperButton("Edit Definition Script", "Edit the definition script for the table", Keys.F8);
                 AddHelperButton("Check table", "Check the table definition", Keys.F7);
 
@@ -82,15 +74,28 @@ namespace Seal.Forms
             }
             else if (SelectedEntity is ReportModel)
             {
-                if (!((ReportModel)SelectedEntity).Source.IsNoSQL)
+                var model = (ReportModel)SelectedEntity;
+
+                if (!model.Source.IsNoSQL)
                 {
                     AddHelperButton("View and Check SQL", "View and check the SQL generated for the model", Keys.F8);
-                    AddHelperButton("View SQL", "View the SQL generated for the model", Keys.F7);
+                    if (!model.IsSQLModel)
+                    {
+                        AddHelperButton("View SQL", "View the SQL generated for the model", Keys.F7);
+                    }
+                    else
+                    {
+                        AddHelperButton("Edit SQL", "Edit the source SQL used for the model", Keys.F7);
+                    }
                 }
             }
-            else if (SelectedEntity is TasksFolder)
+            else if (SelectedEntity is ReportView)
             {
-                AddHelperButton("Edit Tasks Script", "Edit the Tasks Script", Keys.F8);
+                if (((ReportView)SelectedEntity).UseCustomTemplate) AddHelperButton("Edit Custom Template", "Edit the custom template texts", Keys.F8);
+            }
+            else if (SelectedEntity is Report)
+            {
+                AddHelperButton("Edit Report Input Values", "Edit the Report Input Values", Keys.F8);
                 AddHelperButton("Edit Common Scripts", "Edit the Common Scripts", Keys.F7);
             }
             else if (SelectedEntity is ReportTask)
@@ -137,13 +142,13 @@ namespace Seal.Forms
                             source.Error = source.Connection.Error;
                             source.InitEditor();
                         }
-                        if (key == Keys.F8 || key == Keys.F12)
+                        if (key == Keys.F12)
                         {
                             MetaTable table = ((MetaSource)SelectedEntity).MetaData.MasterTable;
                             if (table != null)
                             {
                                 TreeViewHelper.SelectNode(MainTreeView, MainTreeView.SelectedNode.Nodes, table);
-                                EditProperty(table.IsSQL ? "SQL Statement" : "Default Load Script");
+                                EditProperty("Default Load Script");
                             }
                         }
                     }
@@ -156,7 +161,7 @@ namespace Seal.Forms
                         if (key == Keys.F7) ((MetaTable)SelectedEntity).CheckTable(null);
                         if (key == Keys.F8)
                         {
-                            if (((MetaTable)SelectedEntity).IsSQL) EditProperty("SQL Statement");
+                            if (((MetaTable)SelectedEntity).IsSQL) EditProperty("SQL Select Statement");
                             else EditProperty("Definition Script");
                         }
                         if (key == Keys.F9 && ((MetaTable)SelectedEntity).DynamicColumns)
@@ -180,7 +185,7 @@ namespace Seal.Forms
                     }
                     else if (SelectedEntity is MetaEnum)
                     {
-                        if (key == Keys.F8) EditProperty("Select SQL Statement");
+                        if (key == Keys.F8) EditProperty("SQL Select Statement");
                         if (key == Keys.F9)
                         {
                             if (EntityHandler != null) EntityHandler.SetModified();
@@ -191,11 +196,6 @@ namespace Seal.Forms
                     {
                         if (key == Keys.F7) ((MetaJoin)SelectedEntity).CheckJoin();
                         if (key == Keys.F8) EditProperty("SQL Clause");
-                    }
-                    else if (SelectedEntity is TasksFolder)
-                    {
-                        if (key == Keys.F7) EditProperty("Common Scripts");
-                        if (key == Keys.F8) EditProperty("Tasks Script");
                     }
                     else if (SelectedEntity is ReportTask)
                     {
@@ -211,34 +211,70 @@ namespace Seal.Forms
                             frm.PropertyName = "";
 
                             ReportModel model = SelectedEntity as ReportModel;
-                            model.Report.CheckingExecution = true;
-                            try
+                            if (model.IsSQLModel && key == Keys.F7)
                             {
-                                model.BuildSQL();
-                                frm.SqlToCheck = model.Sql;
-                                model.Report.CheckingExecution = false;
-                                model.BuildSQL();
+                                frm.Text = "SQL Editor: Edit the SQL Select Statement";
+                                frm.SetSamples(new List<string>() {
+                                    "SELECT * FROM Orders", "SELECT *\r\nFROM Employees\r\nWHERE {CommonRestriction_LastName}",
+                                    "SELECT * FROM Orders", "SELECT *\r\nFROM Employees\r\nWHERE EmployeeID > {CommonValue_ID}"
+                                });
+                                frm.WarningOnError = true;
+                                frm.sqlTextBox.Text = model.Table.Sql;
+                                if (frm.ShowDialog() == DialogResult.OK)
+                                {
+                                    try
+                                    {
+                                        Cursor.Current = Cursors.WaitCursor;
+                                        model.Table.Sql = frm.sqlTextBox.Text;
+                                        model.RefreshMetaTable(true);
+                                    }
+                                    finally
+                                    {
+                                        Cursor.Current = Cursors.Default;
+                                    }
+
+                                    if (EntityHandler != null)
+                                    {
+                                        EntityHandler.SetModified();
+                                        EntityHandler.RefreshModelTreeView();
+                                    }
+
+                                    if (!string.IsNullOrEmpty(model.Table.Error)) throw new Exception("Error when building columns from the SQL Select Statement:\r\n" + model.Table.Error);
+                                }
                             }
-                            finally
+                            else
                             {
-                                model.Report.CheckingExecution = false;
+                                model.Report.CheckingExecution = true;
+                                try
+                                {
+                                    model.BuildSQL();
+                                    frm.SqlToCheck = model.Sql;
+                                    model.Report.CheckingExecution = false;
+                                    model.BuildSQL();
+                                }
+                                finally
+                                {
+                                    model.Report.CheckingExecution = false;
+                                }
+                                if (!string.IsNullOrEmpty(model.ExecutionError))
+                                {
+                                    throw new Exception("Error building the SQL Statement...\r\nPlease fix these errors first.\r\n" + model.ExecutionError);
+                                }
+                                frm.sqlTextBox.Text = model.Sql;
+                                frm.SetReadOnly();
+                                if (key == Keys.F8) frm.checkSQL();
+                                frm.ShowDialog();
                             }
-                            if (!string.IsNullOrEmpty(model.ExecutionError))
-                            {
-                                throw new Exception("Error building the SQL Statement...\r\nPlease fix these errors first.\r\n" + model.ExecutionError);
-                            }
-                            frm.sqlTextBox.Text = model.Sql;
-                            frm.SetReadOnly();
-                            if (key == Keys.F8) frm.checkSQL();
-                            frm.ShowDialog();
                         }
                     }
                     else if (SelectedEntity is ReportView)
                     {
-                        if (key == Keys.F7) EditProperty("General Parameters");
-                        else if (key == Keys.F8) EditProperty("CSS");
-                        else if (key == Keys.F9) EditProperty("Data Table Configuration");
-                        else if (key == Keys.F12) EditProperty("NVD3 Chart Configuration");
+                        if (key == Keys.F8) EditProperty("Custom template");
+                    }
+                    else if (SelectedEntity is Report)
+                    {
+                        if (key == Keys.F7) EditProperty("Common Scripts");
+                        if (key == Keys.F8) EditProperty("Report Input Values");
                     }
                     else if (SelectedEntity is ReportSchedule)
                     {

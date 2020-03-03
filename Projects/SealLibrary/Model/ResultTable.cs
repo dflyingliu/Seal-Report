@@ -1,37 +1,68 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
-using Seal.Converter;
+using Seal.Forms;
 using Seal.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
-using System.Linq;
 using System.Text;
 using System.Web;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// ResultTable are generated after a model execution. It stores list of arrays of ResultCell.
+    /// </summary>
     public class ResultTable
     {
+        /// <summary>
+        /// Start row of the body of the table
+        /// </summary>
         public int BodyStartRow = 0;
+
+        /// <summary>
+        /// End row of the body of the table
+        /// </summary>
         public int BodyEndRow = 0;
+
+        /// <summary>
+        /// Strat column of the body
+        /// </summary>
         public int BodyStartColumn = 0;
+
+        /// <summary>
+        /// List of the ResultTotalCell of the table
+        /// </summary>
         public List<ResultTotalCell> TotalCells = new List<ResultTotalCell>();
 
+        /// <summary>
+        /// List of a arrays of ResultCell
+        /// </summary>
         public List<ResultCell[]> Lines = new List<ResultCell[]>();
 
+        /// <summary>
+        /// True if the table has been inverted
+        /// </summary>
         public bool InvertDone = false;
+
+        /// <summary>
+        /// Custom Tag the can be used at execution time to store any object
+        /// </summary>
+        public object Tag;
 
         private string _lastSearch = "";
         private List<ResultCell[]> _filteredLines = null;
 
+        /// <summary>
+        /// Function to return partial table data to the report result
+        /// </summary>
         public string GetLoadTableData(ReportView view, string parameter)
         {
-            var model = view.Model;
-            var parameters = parameter.Replace("&lt;", "<").Replace("&gt;",">").Split('§');
+            var model = view.ModelView.Model;
+            var parameters = parameter.Replace("&lt;", "<").Replace("&gt;", ">").Split('§');
 
             int echo = 1, len = 50, start = 0;
             string sort = "", search = "";
@@ -46,7 +77,7 @@ namespace Seal.Model
             }
             catch (Exception ex)
             {
-                Helper.WriteLogEntryWeb(EventLogEntryType.Error, string.Format("GetLoadTableData-> Error in parameter:{0}\r\n{1}", parameter, ex.Message));
+                Helper.WriteLogEntry("Seal Get Table Data", EventLogEntryType.Error, string.Format("GetLoadTableData-> Error in parameter:{0}\r\n{1}", parameter, ex.Message));
                 echo = 1; len = 50; start = 0;
                 sort = ""; search = "";
             }
@@ -87,6 +118,16 @@ namespace Seal.Model
             {
                 var sortIndex = int.Parse(sort.Split(',')[0]);
                 var refLine = Lines[BodyStartRow];
+
+                //Handle hidden columns
+                for (int col = 0; col < refLine.Length; col++)
+                {
+                    if (col <= sortIndex && (view.IsColumnHidden(col) || IsColumnHidden(col))) {
+                        sortIndex++;
+                    }
+                }
+
+
                 if (sortIndex < refLine.Length)
                 {
                     //clear other sort
@@ -97,13 +138,13 @@ namespace Seal.Model
                         ResultCell cell = line[sortIndex];
                         if (cell.Element != null)
                         {
-                            var ascdesc = (sort.ToLower().Contains("asc") ? SortOrderConverter.kAscendantSortKeyword : SortOrderConverter.kDescendantSortKeyword);
+                            var ascdesc = (sort.ToLower().Contains("asc") ? ReportElement.kAscendantSortKeyword : ReportElement.kDescendantSortKeyword);
                             cell.Element.FinalSortOrder = sortIndex + " " + ascdesc;
                             break;
                         }
                     }
                 }
-                _filteredLines.Sort(ResultCell.CompareCellsForTableLoad);
+                if (ResultCell.ShouldSort(_filteredLines)) _filteredLines.Sort(ResultCell.CompareCellsForTableLoad);
             }
 
             //build the json result
@@ -113,11 +154,10 @@ namespace Seal.Model
                 len = _filteredLines.Count;
             }
 
-            var dataTableView = view.Report.FindViewFromTemplate(view.Views, ReportViewTemplate.DataTableName);
-            var rowBodyClass = dataTableView.GetValue("data_table_body_class");
-            var rowBodyStyle = dataTableView.GetValue("data_table_body_css");
-            var rowSubClass = dataTableView.GetValue("data_table_subtotal_class");
-            var rowSubStyle = dataTableView.GetValue("data_table_subtotal_css");
+            var rowBodyClass = view.GetValue("data_table_body_class");
+            var rowBodyStyle = view.GetValue("data_table_body_css");
+            var rowSubClass = view.GetValue("data_table_subtotal_class");
+            var rowSubStyle = view.GetValue("data_table_subtotal_css");
 
             for (int row = start; row < _filteredLines.Count && row < start + len; row++)
             {
@@ -126,7 +166,7 @@ namespace Seal.Model
                 sb.Append("[");
                 for (int col = 0; col < line.Length; col++)
                 {
-                    if (dataTableView.IsColumnHidden(col) || IsColumnHidden(col)) { continue; }
+                    if (view.IsColumnHidden(col) || IsColumnHidden(col)) { continue; }
                     ResultCell cell = line[col];
                     var cellValue = !string.IsNullOrEmpty(cell.FinalValue) ? cell.FinalValue : cell.DisplayValue;
                     var fullValue = HttpUtility.JavaScriptStringEncode(string.Format("{0}§{1}§{2}§{3}§{4}§{5}", cell.IsSubTotal ? rowSubStyle : rowBodyStyle, cell.IsSubTotal ? rowSubClass : rowBodyClass, model.GetNavigation(cell, true), cell.CellCssStyle, cell.CellCssClass, cellValue));
@@ -149,12 +189,18 @@ namespace Seal.Model
         }
 
         List<int> _columnsHidden = null;
+        /// <summary>
+        /// Set a column as hidden
+        /// </summary>
         public void SetColumnHidden(int col)
         {
             if (_columnsHidden == null) _columnsHidden = new List<int>();
             if (!_columnsHidden.Contains(col)) _columnsHidden.Add(col);
         }
 
+        /// <summary>
+        /// True if the column is hidden
+        /// </summary>
         public bool IsColumnHidden(int col)
         {
             if (_columnsHidden != null) return _columnsHidden.Contains(col);
@@ -162,15 +208,25 @@ namespace Seal.Model
         }
 
         //Helpers
+        /// <summary>
+        /// Row count of the table
+        /// </summary>
         public int RowCount
         {
             get { return Lines.Count; }
         }
+
+        /// <summary>
+        /// Column count of the table
+        /// </summary>
         public int ColumnCount
         {
             get { return Lines.Count > 0 ? Lines[0].Length : 0; }
         }
 
+        /// <summary>
+        /// Helper to access a ResultCell of the table
+        /// </summary>
         public ResultCell this[int row, int column]
         {
             get
@@ -179,11 +235,17 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if the row is a sub-total
+        /// </summary>
         public bool IsSubTotalRow(int row)
         {
             return (row < RowCount && ColumnCount > 0 && Lines[row][0].IsSubTotal);
         }
 
+        /// <summary>
+        /// Returns the ResultTable as a DataTable
+        /// </summary>
         public DataTable GetDataTable()
         {
             var result = new DataTable();
@@ -206,6 +268,43 @@ namespace Seal.Model
             }
             return result;
         }
+
+        /// <summary>
+        /// Returns the column number from the element column name. -1 if not found.
+        /// </summary>
+        public int GetCol(string elementName)
+        {
+            int result = -1;
+            for (int col = 0; col < ColumnCount && RowCount > 0; col++)
+            {
+                ResultCell cell = this[0, col];
+                if (cell != null)
+                {
+                    if (cell.Element.MetaColumn.ColumnName == elementName)
+                    {
+                        result = col;
+                        break;
+                    }
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// True if the column has cells with navigation links
+        /// </summary>
+        public bool HasNavigation(int sourceRow, int col)
+        {
+            if (sourceRow == BodyStartRow - 1)
+            {
+                for (int row = BodyStartRow; row < BodyEndRow && col < ColumnCount; row++)
+                {
+                    if (this[row, col].Links.Count > 0) return true;
+                }
+            }
+            return false;
+        }
+
     }
 
 }

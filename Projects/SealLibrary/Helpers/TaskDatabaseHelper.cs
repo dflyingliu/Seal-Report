@@ -1,4 +1,8 @@
-﻿using Seal.Model;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
+using Seal.Model;
 using System;
 using System.Data;
 using System.Data.Common;
@@ -9,6 +13,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.VisualBasic.FileIO;
+using System.Data.SqlClient;
 
 namespace Seal.Helpers
 {
@@ -21,7 +26,7 @@ namespace Seal.Helpers
     public delegate string CustomGetTableColumnValues(DataRow row, string dateTimeFormat);
     public delegate string CustomGetTableColumnValue(DataRow row, DataColumn col, string datetimeFormat);
 
-    public delegate DataTable CustomLoadDataTable(string connectionString, string sql);
+    public delegate DataTable CustomLoadDataTable(ConnectionType connectionType, string connectionString, string sql);
     public delegate DataTable CustomLoadDataTableFromExcel(string excelPath, string tabName = "");
     public delegate DataTable CustomLoadDataTableFromCSV(string csvPath, char? separator = null);
 
@@ -40,6 +45,7 @@ namespace Seal.Helpers
         public string LoadSortColumn = ""; //Sort column used if LoadBurstSize is specified
         public bool UseDbDataAdapter = false;
         public int InsertBurstSize = 500;
+        public int MaxDecimalNumber = -1; //If set, limit the number of decimals for numeric values
         public string ExcelOdbcDriver = "Driver={{Microsoft Excel Driver (*.xls, *.xlsx, *.xlsm, *.xlsb)}};DBQ={0}";
         public Encoding DefaultEncoding = Encoding.Default;
         public bool TrimText = true;
@@ -94,61 +100,76 @@ namespace Seal.Helpers
             return table;
         }
 
-        public DataTable LoadDataTable(string connectionString, string sql)
+        public DataTable LoadDataTable(ConnectionType connectionType, string connectionString, string sql)
         {
-            if (MyLoadDataTable != null) return MyLoadDataTable(connectionString, sql);
-
             DataTable table = new DataTable();
+            try
+            {
+                if (MyLoadDataTable != null) return MyLoadDataTable(connectionType, connectionString, sql);
 
-            if (UseDbDataAdapter)
-            {
-                DbDataAdapter adapter = null;
-                var connection = Helper.DbConnectionFromConnectionString(connectionString);
-                connection.Open();
-                if (connection is OdbcConnection) adapter = new OdbcDataAdapter(sql, (OdbcConnection)connection);
-                else adapter = new OleDbDataAdapter(sql, (OleDbConnection)connection);
-                adapter.SelectCommand.CommandTimeout = SelectTimeout;
-                adapter.Fill(table);
-            }
-            else
-            {
-                DbCommand cmd = new OdbcCommand();
-                var connection = Helper.DbConnectionFromConnectionString(connectionString);
-                connection.Open();
-                if (connection is OdbcConnection) cmd = new OdbcCommand(sql, (OdbcConnection)connection);
-                else cmd = new OleDbCommand(sql, (OleDbConnection)connection);
-                cmd.CommandTimeout = 0;
-                cmd.CommandType = CommandType.Text;
-                DbDataReader dr = cmd.ExecuteReader();
-                DataTable schemaTable = dr.GetSchemaTable();
-                foreach (DataRow dataRow in schemaTable.Rows)
+                var connection = Helper.DbConnectionFromConnectionString(connectionType, connectionString);
+                try
                 {
-                    DataColumn dataColumn = new DataColumn();
-                    dataColumn.ColumnName = dataRow["ColumnName"].ToString();
-                    dataColumn.DataType = Type.GetType(dataRow["DataType"].ToString());
-                    dataColumn.ReadOnly = (bool)dataRow["IsReadOnly"];
-                    dataColumn.AutoIncrement = (bool)dataRow["IsAutoIncrement"];
-                    dataColumn.Unique = (bool)dataRow["IsUnique"];
-
-                    for (int i = 0; i < table.Columns.Count; i++)
+                    connection.Open();
+                    if (UseDbDataAdapter)
                     {
-                        if (dataColumn.ColumnName == table.Columns[i].ColumnName)
+                        DbDataAdapter adapter = null;
+                        if (connection is OdbcConnection) adapter = new OdbcDataAdapter(sql, (OdbcConnection)connection);
+                        else if (connection is SqlConnection) adapter = new SqlDataAdapter(sql, (SqlConnection)connection);
+                        else adapter = new OleDbDataAdapter(sql, (OleDbConnection)connection);
+                        adapter.SelectCommand.CommandTimeout = SelectTimeout;
+                        adapter.Fill(table);
+                    }
+                    else
+                    {
+                        DbCommand cmd = null;
+                        if (connection is OdbcConnection) cmd = new OdbcCommand(sql, (OdbcConnection)connection);
+                        else if (connection is SqlConnection) cmd = new SqlCommand(sql, (SqlConnection)connection);
+                        else cmd = new OleDbCommand(sql, (OleDbConnection)connection);
+                        cmd.CommandTimeout = 0;
+                        cmd.CommandType = CommandType.Text;
+
+                        DbDataReader dr = cmd.ExecuteReader();
+
+                        DataTable schemaTable = dr.GetSchemaTable();
+                        foreach (DataRow dataRow in schemaTable.Rows)
                         {
-                            dataColumn.ColumnName += "_" + table.Columns.Count.ToString();
+                            DataColumn dataColumn = new DataColumn();
+                            dataColumn.ColumnName = dataRow["ColumnName"].ToString();
+                            dataColumn.DataType = Type.GetType(dataRow["DataType"].ToString());
+                            dataColumn.ReadOnly = (bool)dataRow["IsReadOnly"];
+                            dataColumn.AutoIncrement = (bool)dataRow["IsAutoIncrement"];
+                            dataColumn.Unique = (bool)dataRow["IsUnique"];
+
+                            for (int i = 0; i < table.Columns.Count; i++)
+                            {
+                                if (dataColumn.ColumnName == table.Columns[i].ColumnName)
+                                {
+                                    dataColumn.ColumnName += "_" + table.Columns.Count.ToString();
+                                }
+                            }
+                            table.Columns.Add(dataColumn);
+                        }
+
+                        while (dr.Read())
+                        {
+                            DataRow dataRow = table.NewRow();
+                            for (int i = 0; i < table.Columns.Count; i++)
+                            {
+                                dataRow[i] = dr[i];
+                            }
+                            table.Rows.Add(dataRow);
                         }
                     }
-                    table.Columns.Add(dataColumn);
                 }
-
-                while (dr.Read())
+                finally
                 {
-                    DataRow dataRow = table.NewRow();
-                    for (int i = 0; i < table.Columns.Count; i++)
-                    {
-                        dataRow[i] = dr[i];
-                    }
-                    table.Rows.Add(dataRow);
+                    connection.Close();
                 }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(string.Format("Error got when executing '{0}':\r\n{1}\r\n", sql, ex.Message));
             }
 
             return table;
@@ -205,7 +226,7 @@ namespace Seal.Helpers
                         separator = ',';
                         if (line2.Split(';').Length > line2.Split(',').Length) separator = ';';
                     }
-                    var sep2 = (separator.Value == '|' || separator.Value == ':' ? "\\" : "") + separator.Value;
+                    var sep2 = (separator.Value == '|' || separator.Value == ':' ? Path.DirectorySeparatorChar.ToString() : "") + separator.Value;
                     string exp = "(?<=^|" + sep2 + ")(\"(?:[^\"]|\"\")*\"|[^" + sep2 + "]*)";
                     regexp = new Regex(exp);
                 }
@@ -329,37 +350,51 @@ namespace Seal.Helpers
         {
             DbCommand result = null;
             if (connection is OdbcConnection) result = ((OdbcConnection)connection).CreateCommand();
+            else if (connection is SqlConnection) result = ((SqlConnection)connection).CreateCommand();
             else result = ((OleDbConnection)connection).CreateCommand();
             result.CommandTimeout = SelectTimeout;
             return result;
         }
 
-        public void ExecuteNonQuery(string connectionString, string sql, string commandsSeparator = null)
+        public void ExecuteNonQuery(ConnectionType connectionType, string connectionString, string sql, string commandsSeparator = null)
         {
-            DbConnection connection = Helper.DbConnectionFromConnectionString(connectionString);
-            connection.Open();
-            DbCommand command = GetDbCommand(connection);
-            string[] commandTexts = new string[] { sql };
-            if (!string.IsNullOrEmpty(commandsSeparator))
+            var connection = Helper.DbConnectionFromConnectionString(connectionType, connectionString);
+            try
             {
-                commandTexts = sql.Split(new string[] { commandsSeparator }, StringSplitOptions.RemoveEmptyEntries);
+                connection.Open();
+                DbCommand command = GetDbCommand(connection);
+                string[] commandTexts = new string[] { sql };
+                if (!string.IsNullOrEmpty(commandsSeparator))
+                {
+                    commandTexts = sql.Split(new string[] { commandsSeparator }, StringSplitOptions.RemoveEmptyEntries);
+                }
+                foreach (var commandText in commandTexts)
+                {
+                    command.CommandText = commandText;
+                    command.ExecuteNonQuery();
+                }
             }
-            foreach (var commandText in commandTexts)
+            finally
             {
-                command.CommandText = commandText;
-                command.ExecuteNonQuery();
+                connection.Close();
             }
-            connection.Close();
         }
 
-        public object ExecuteScalar(string connectionString, string sql)
+        public object ExecuteScalar(ConnectionType connectionType, string connectionString, string sql, bool useSqlConnection = false)
         {
-            DbConnection connection = Helper.DbConnectionFromConnectionString(connectionString);
-            connection.Open();
-            DbCommand command = GetDbCommand(connection);
-            command.CommandText = sql;
-            var result = command.ExecuteScalar();
-            connection.Close();
+            object result = null;
+            var connection = Helper.DbConnectionFromConnectionString(connectionType, connectionString);
+            try
+            {
+                connection.Open();
+                DbCommand command = GetDbCommand(connection);
+                command.CommandText = sql;
+                result = command.ExecuteScalar();
+            }
+            finally
+            {
+                connection.Close();
+            }
             return result;
         }
 
@@ -367,54 +402,68 @@ namespace Seal.Helpers
         {
             try
             {
-                command.CommandText = string.Format("drop table {0}", CleanName(table.TableName));
+                try
+                {
+                    command.CommandText = string.Format("drop table {0}", CleanName(table.TableName));
+                    ExecuteCommand(command);
+                }
+                catch { }
+                command.CommandText = GetTableCreateCommand(table);
                 ExecuteCommand(command);
             }
-            catch { }
-            command.CommandText = GetTableCreateCommand(table);
-            ExecuteCommand(command);
+            finally
+            {
+                command.Connection.Close();
+            }
         }
 
         public void InsertTable(DbCommand command, DataTable table, string dateTimeFormat, bool deleteFirst)
         {
-            DbTransaction transaction = command.Connection.BeginTransaction();
-            int cnt = 0;
             try
             {
-                command.Transaction = transaction;
-                if (deleteFirst)
+                DbTransaction transaction = command.Connection.BeginTransaction();
+                int cnt = 0;
+                try
                 {
-                    command.CommandText = string.Format("delete from {0}", CleanName(table.TableName));
-                    ExecuteCommand(command);
-                }
+                    command.Transaction = transaction;
+                    if (deleteFirst)
+                    {
+                        command.CommandText = string.Format("delete from {0}", CleanName(table.TableName));
+                        ExecuteCommand(command);
+                    }
 
-                StringBuilder sql = new StringBuilder("");
-                string sqlTemplate = string.Format("insert into {0} ({1})", CleanName(table.TableName), GetTableColumnNames(table)) + " values ({0});\r\n";
-                foreach (DataRow row in table.Rows)
-                {
-                    sql.AppendFormat(sqlTemplate, GetTableColumnValues(row, dateTimeFormat));
-                    cnt++;
-                    if (cnt % InsertBurstSize == 0)
+                    StringBuilder sql = new StringBuilder("");
+                    string sqlTemplate = string.Format("insert into {0} ({1})", CleanName(table.TableName), GetTableColumnNames(table)) + " values ({0});\r\n";
+                    foreach (DataRow row in table.Rows)
+                    {
+                        sql.AppendFormat(sqlTemplate, GetTableColumnValues(row, dateTimeFormat));
+                        cnt++;
+                        if (cnt % InsertBurstSize == 0)
+                        {
+                            command.CommandText = GetInsertCommand(sql.ToString());
+                            ExecuteCommand(command);
+                            sql = new StringBuilder("");
+                        }
+                    }
+
+                    if (sql.Length != 0)
                     {
                         command.CommandText = GetInsertCommand(sql.ToString());
                         ExecuteCommand(command);
-                        sql = new StringBuilder("");
                     }
+                    transaction.Commit();
                 }
-
-                if (sql.Length != 0)
+                catch
                 {
-                    command.CommandText = GetInsertCommand(sql.ToString());
-                    ExecuteCommand(command);
+                    transaction.Rollback();
+                    throw;
                 }
-                transaction.Commit();
             }
-            catch
+            finally
             {
-                transaction.Rollback();
-                throw;
+                command.Connection.Close();
             }
-        }
+}
 
 
         public string RootGetTableCreateCommand(DataTable table)
@@ -549,25 +598,33 @@ namespace Seal.Helpers
 
         public string RootGetTableColumnValue(DataRow row, DataColumn col, string dateTimeFormat)
         {
-            StringBuilder result = new StringBuilder();
+            string result = "";
             if (row.IsNull(col))
             {
-                result.Append("NULL");
+                result = "NULL";
             }
             else if (IsNumeric(col))
             {
-                result.AppendFormat(row[col].ToString().Replace(',', '.'));
+                result = row[col].ToString().Replace(',', '.');
+                if (!(row[col] is int) && MaxDecimalNumber >= 0 && result.Length > MaxDecimalNumber)
+                {
+                    string[] parts = result.Split('.');
+                    if (parts.Length == 2 && parts[1].Length > MaxDecimalNumber)
+                    {
+                        result = parts[0] + "." + parts[1].Substring(0, MaxDecimalNumber);
+                    }
+                }
             }
             else if (col.DataType.Name == "DateTime" || col.DataType.Name == "Date")
             {
-                result.Append(Helper.QuoteSingle(((DateTime)row[col]).ToString(dateTimeFormat)));
+                result = Helper.QuoteSingle(((DateTime)row[col]).ToString(dateTimeFormat));
             }
             else
             {
                 string res = row[col].ToString();
                 if (TrimText) res = res.Trim();
                 if (RemoveCrLf) res = res.Replace("\r", " ").Replace("\n", " ");
-                result.Append(Helper.QuoteSingle(res));
+                result = Helper.QuoteSingle(res);
             }
 
             return result.ToString();
@@ -579,6 +636,20 @@ namespace Seal.Helpers
             return RootGetTableColumnValue(row, col, dateTimeFormat);
         }
 
+        public bool AreRowsIdentical(DataRow row1, DataRow row2)
+        {
+            bool result = true;
+            if (row1.ItemArray.Length != row2.ItemArray.Length) result = false;
+            else
+            {
+                for (int j = 0; j < row1.ItemArray.Length && result; j++)
+                {
+                    if (row1[j].ToString() != row2[j].ToString()) result = false;
+                }
+            }
+            return result;
+        }
+
         public bool AreTablesIdentical(DataTable checkTable1, DataTable checkTable2)
         {
             bool result = true;
@@ -588,10 +659,7 @@ namespace Seal.Helpers
             {
                 for (int i = 0; i < checkTable1.Rows.Count && result; i++)
                 {
-                    for (int j = 0; j < checkTable1.Columns.Count && result; j++)
-                    {
-                        if (checkTable1.Rows[i][j].ToString() != checkTable2.Rows[i][j].ToString()) result = false;
-                    }
+                    if (!AreRowsIdentical(checkTable1.Rows[i], checkTable2.Rows[i])) result = false;
                 }
             }
             return result;

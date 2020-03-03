@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -33,9 +33,9 @@ namespace Seal.Forms
 
             configuration.InitEditor();
             mainPropertyGrid.ToolbarVisible = false;
-            mainPropertyGrid.SelectedObject = configuration;
             mainPropertyGrid.PropertySort = PropertySort.Categorized;
             mainPropertyGrid.LineColor = SystemColors.ControlLight;
+            mainPropertyGrid.SelectedObject = configuration;
 
             publish1ToolStripButton.Visible = configuration.ForPublication;
             publish2ToolStripButton.Visible = configuration.ForPublication;
@@ -46,6 +46,8 @@ namespace Seal.Forms
 
             ShowIcon = true;
             Icon = Properties.Resources.serverManager;
+
+  //          PropertyGridHelper.AddResetMenu(mainPropertyGrid);
         }
 
         private void ConfigurationEditorForm_Load(object sender, EventArgs e)
@@ -221,6 +223,5 @@ New parameter values may require a restart of the Report Designer or the Web Ser
         {
             Process.Start(System.Environment.SystemDirectory + @"\inetsrv\iis.msc", "/s");
         }
-
     }
 }

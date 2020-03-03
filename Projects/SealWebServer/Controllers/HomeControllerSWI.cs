@@ -1,49 +1,77 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Web;
 using System.Web.Mvc;
 using Seal.Helpers;
 using Seal.Model;
 using System.Threading;
 using System.Collections.Generic;
 using System.Globalization;
-using Newtonsoft.Json;
-using Seal.Forms;
+using System.Diagnostics;
 
 namespace SealWebServer.Controllers
 {
     public partial class HomeController : Controller
     {
+        /// <summary>
+        /// Start a session with the Web Report Server using the user name, password, token (may be optional according to the authentication configured on the server) and returns information of the logged user (SWIUserProfile).
+        /// </summary>
         [HttpPost]
-        public ActionResult SWILogin(string user, string password)
+        public ActionResult SWILogin(string user, string password, string token)
         {
-            WriteDebug("SWILogin");
+            writeDebug("SWILogin");
+
             try
             {
-                if (WebUser == null || !WebUser.IsAuthenticated || (!string.IsNullOrEmpty(user) && WebUser.WebUserName != user))
+                if (WebUser == null || !WebUser.IsAuthenticated || (!string.IsNullOrEmpty(user) && WebUser.WebUserName != user) || (!string.IsNullOrEmpty(token) && WebUser.Token != token))
                 {
                     CreateRepository();
                     CreateWebUser();
                     WebUser.WebPrincipal = User;
                     WebUser.WebUserName = user;
                     WebUser.WebPassword = password;
+                    WebUser.Token = token;
+                    WebUser.Request = Request; //!NETCore
                     Authenticate();
 
                     if (!WebUser.IsAuthenticated) throw new Exception(string.IsNullOrEmpty(WebUser.Error) ? Translate("Invalid user name or password") : WebUser.Error);
                 }
 
+                //Audit
+                Audit.LogAudit(AuditType.Login, WebUser, null, null);
+
                 //Set culture from cookie
-                string culture = GetCookie(SealCultureCookieName);
+                string culture = getCookie(SealCultureCookieName);
                 if (!string.IsNullOrEmpty(culture)) Repository.SetCultureInfo(culture);
 
+                //Set default view
+                string view = getCookie(SealLastViewCookieName);
+                if (string.IsNullOrEmpty(view)) view = "reports";
+                //Check rights
+                if (WebUser.ViewType == Seal.Model.ViewType.Reports && view == "dashboards") view = "reports";
+                else if (WebUser.ViewType == Seal.Model.ViewType.Dashboards && view == "reports") view = "dashboards";
 
-                return Json(new SWIUserProfile() { name = WebUser.Name, group = WebUser.SecurityGroupsDisplay, culture = Repository.CultureInfo.EnglishName, folder = GetCookie(SealLastFolderCookieName) });
+                //Refresh widgets
+                DashboardWidgetsPool.ForceReload();
+                DashboardExecutions.Clear();
+
+                return Json(new SWIUserProfile()
+                {
+                    name = WebUser.Name,
+                    group = WebUser.SecurityGroupsDisplay,
+                    culture = Repository.CultureInfo.EnglishName,
+                    folder = getCookie(SealLastFolderCookieName),
+                    dashboard = getCookie(SealLastDashboardCookieName),
+                    viewtype = WebUser.ViewType,
+                    lastview = view,
+                    dashboardfolders = WebUser.DashboardFolders.ToArray(),
+                    managedashboards = WebUser.ManageDashboards,
+                    usertag = WebUser.Tag
+                });
             }
             catch (Exception ex)
             {
@@ -51,11 +79,28 @@ namespace SealWebServer.Controllers
             }
         }
 
+        void addValidFolders(SWIFolder folder, List<SWIFolder> result)
+        {
+            if (folder.right == 0) {
+                //Add only folder with rights
+                foreach (var childFolder in folder.folders)
+                {
+                    addValidFolders(childFolder, result);
+                }
+            }
+            else
+            {
+                result.Add(folder);
+            }
+        }
 
+        /// <summary>
+        /// Returns all the folders of the user (including Personal folders).
+        /// </summary>
         [HttpPost]
         public ActionResult SWIGetRootFolders()
         {
-            WriteDebug("SWIGetRootFolders");
+            writeDebug("SWIGetRootFolders");
             try
             {
                 checkSWIAuthentication();
@@ -68,10 +113,16 @@ namespace SealWebServer.Controllers
                     result.Add(personalFolder);
                 }
                 //Report
-                var folder = getFolder("\\");
+                var folder = getFolder(Path.DirectorySeparatorChar.ToString());
                 fillFolder(folder);
-                result.Add(folder);
-
+                if (WebUser.ShowAllFolders)
+                {
+                    result.Add(folder);
+                }
+                else
+                {
+                    addValidFolders(folder, result);
+                }
                 WebUser.Folders = result;
                 return Json(result.ToArray());
             }
@@ -81,10 +132,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Returns the list of the published folders for the current user from a root folder.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIGetFolders(string path)
         {
-            WriteDebug("SWIGetFolders");
+            writeDebug("SWIGetFolders");
             try
             {
                 checkSWIAuthentication();
@@ -100,10 +154,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Returns the list of file names and details contained in a folder.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIGetFolderDetail(string path)
         {
-            WriteDebug("SWIGetFolderDetail");
+            writeDebug("SWIGetFolderDetail");
             try
             {
                 SWIFolder folder = getFolder(path);
@@ -112,19 +169,21 @@ namespace SealWebServer.Controllers
                 {
                     foreach (string newPath in Directory.GetFiles(folder.GetFullPath(), "*.*"))
                     {
+                        //check right on files only
                         if (folder.files && FileHelper.IsSealReportFile(newPath)) continue;
+                        if (folder.IsPersonal && newPath.ToLower() == WebUser.ProfilePath.ToLower()) continue;
 
                         files.Add(new SWIFile()
                         {
                             path = folder.Combine(Path.GetFileName(newPath)),
                             name = Repository.TranslateFileName(newPath) + (FileHelper.IsSealReportFile(newPath) ? "" : Path.GetExtension(newPath)),
                             last = System.IO.File.GetLastWriteTime(newPath).ToString("G", Repository.CultureInfo),
-                            isReport = FileHelper.IsSealReportFile(newPath),
+                            isreport = FileHelper.IsSealReportFile(newPath),
                             right = folder.right
                         });
                     }
                 }
-                SetCookie(SealLastFolderCookieName, path);
+                setCookie(SealLastFolderCookieName, path);
 
                 return Json(new SWIFolderDetail() { folder = folder, files = files.ToArray() });
             }
@@ -134,10 +193,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Returns the list of file names and details matching a search in the repository.
+        /// </summary>
         [HttpPost]
         public ActionResult SWISearch(string path, string pattern)
         {
-            WriteDebug("SWISearch");
+            writeDebug("SWISearch");
             try
             {
                 SWIFolder folder = getFolder(path);
@@ -152,10 +214,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Delete a sub-folder in the repository. The folder must be empty.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIDeleteFolder(string path)
         {
-            WriteDebug("SWIDeleteFolder");
+            writeDebug("SWIDeleteFolder");
             try
             {
                 SWIFolder folder = getFolder(path);
@@ -169,10 +234,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Create a sub-folder in the repository.
+        /// </summary>
         [HttpPost]
         public ActionResult SWICreateFolder(string path)
         {
-            WriteDebug("SWICreateFolder");
+            writeDebug("SWICreateFolder");
             try
             {
                 SWIFolder folder = getFolder(path);
@@ -186,10 +254,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Rename a sub-folder in the repository.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIRenameFolder(string source, string destination)
         {
-            WriteDebug("SWIRenameFolder");
+            writeDebug("SWIRenameFolder");
             try
             {
                 SWIFolder folderSource = getFolder(source);
@@ -204,10 +275,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Returns the views and outputs of a report.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIGetReportDetail(string path)
         {
-            WriteDebug("SWIGetReportDetail");
+            writeDebug("SWIGetReportDetail");
             try
             {
                 SWIFolder folder = getParentFolder(path);
@@ -216,11 +290,11 @@ namespace SealWebServer.Controllers
                 string newPath = getFullPath(path);
                 if (!System.IO.File.Exists(newPath)) throw new Exception("Report path not found");
                 Repository repository = Repository;
-                Report report = Report.LoadFromFile(newPath, repository);
+                Report report = Report.LoadFromFile(newPath, repository, false);
                 SWIReportDetail result = new SWIReportDetail();
-                result.views = (from i in report.Views.Where(i => i.WebExec && i.GUID != report.ViewGUID) select new SWIView() { guid = i.GUID, name = i.Name, displayName = report.TranslateViewName(i.Name) }).ToArray();
-                result.outputs = ((FolderRight)folder.right >= FolderRight.ExecuteReportOuput) ? (from i in report.Outputs.Where(j => j.PublicExec || (!j.PublicExec && j.UserName == WebUser.Name)) select new SWIOutput() { guid = i.GUID, name = i.Name, displayName = report.TranslateOutputName(i.Name) }).ToArray() : new SWIOutput[] { };
-                if (result.views.Length == 0 && result.outputs.Length == 0) result.views = (from i in report.Views.Where(i => i.WebExec) select new SWIView() { guid = i.GUID, name = i.Name, displayName = report.TranslateViewName(i.Name) }).ToArray();
+                result.views = (from i in report.Views.Where(i => i.WebExec && i.GUID != report.ViewGUID) select new SWIView() { guid = i.GUID, name = i.Name, displayname = report.TranslateViewName(i.Name) }).ToArray();
+                result.outputs = ((FolderRight)folder.right >= FolderRight.ExecuteReportOuput) ? (from i in report.Outputs.Where(j => j.PublicExec || (!j.PublicExec && j.UserName == WebUser.Name)) select new SWIOutput() { guid = i.GUID, name = i.Name, displayname = report.TranslateOutputName(i.Name) }).ToArray() : new SWIOutput[] { };
+                if (result.views.Length == 0 && result.outputs.Length == 0) result.views = (from i in report.Views.Where(i => i.WebExec) select new SWIView() { guid = i.GUID, name = i.Name, displayname = report.TranslateViewName(i.Name) }).ToArray();
 
                 return Json(result);
 
@@ -231,12 +305,13 @@ namespace SealWebServer.Controllers
             }
         }
 
-
-
+        /// <summary>
+        /// Delete files or reports from the repository.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIDeleteFiles(string paths)
         {
-            WriteDebug("SWIDeleteFiles");
+            writeDebug("SWIDeleteFiles");
             try
             {
                 checkSWIAuthentication();
@@ -252,7 +327,7 @@ namespace SealWebServer.Controllers
                         if (FileHelper.IsSealReportFile(fullPath) && FileHelper.ReportHasSchedule(fullPath))
                         {
                             //Delete schedules...
-                            var report = Report.LoadFromFile(fullPath, Repository);
+                            var report = Report.LoadFromFile(fullPath, Repository, false);
                             report.Schedules.Clear();
                             report.SynchronizeTasks();
                         }
@@ -269,10 +344,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Move a file or a report in the repository.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIMoveFile(string source, string destination, bool copy)
         {
-            WriteDebug("SWIMoveFile");
+            writeDebug("SWIMoveFile");
             try
             {
                 SWIFolder folderSource = getParentFolder(source);
@@ -284,18 +362,18 @@ namespace SealWebServer.Controllers
                 string destinationPath = getFullPath(destination);
                 if (!System.IO.File.Exists(sourcePath)) throw new Exception("Error: source path is incorrect");
                 if (folderDest.files && FileHelper.IsSealReportFile(sourcePath)) throw new Exception(Translate("Warning: only files (and not reports) can be copied to this folder."));
-                if (System.IO.File.Exists(destinationPath) && copy) destinationPath = FileHelper.GetUniqueFileName(Path.GetDirectoryName(destinationPath), Path.GetFileNameWithoutExtension(destinationPath) + " - Copy", Path.GetExtension(destinationPath));
+                if (System.IO.File.Exists(destinationPath) && copy) destinationPath = FileHelper.GetUniqueFileName(Path.GetDirectoryName(destinationPath), Path.GetFileNameWithoutExtension(destinationPath) + " - Copy" + Path.GetExtension(destinationPath), Path.GetExtension(destinationPath));
 
                 bool hasSchedule = (FileHelper.IsSealReportFile(sourcePath) && FileHelper.ReportHasSchedule(sourcePath));
                 FileHelper.MoveSealFile(sourcePath, destinationPath, copy);
                 if (hasSchedule)
                 {
                     //Re-init schedules...
-                    var report = Report.LoadFromFile(destinationPath, Repository);
+                    var report = Report.LoadFromFile(destinationPath, Repository, false);
                     if (copy)
                     {
                         //remove schedules
-                        report.Schedules.Clear();
+                        report.InitGUIDAndSchedules();
                         report.SaveToFile();
                     }
                     report.SchedulesWithCurrentUser = false;
@@ -309,17 +387,20 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Execute a report into a report result and returns the result. Check API of Seal Web Interface for more information.
+        /// </summary>
         [HttpPost]
         public ActionResult SWExecuteReportToResult(string path, string viewGUID, string outputGUID, string format)
         {
-            WriteDebug("SWExecuteReportToResult");
+            writeDebug("SWExecuteReportToResult");
             try
             {
                 if (!CheckAuthentication()) return Content(_loginContent);
 
                 SWIFolder folder = getParentFolder(path);
                 if (folder.right == 0) throw new Exception("Error: no right on this folder");
-                if (!string.IsNullOrEmpty(outputGUID) && (FolderRight) folder.right == FolderRight.Execute) throw new Exception("Error: no right to execute output on this folder");
+                if (!string.IsNullOrEmpty(outputGUID) && (FolderRight)folder.right == FolderRight.Execute) throw new Exception("Error: no right to execute output on this folder");
 
                 string filePath = getFullPath(path);
                 if (!System.IO.File.Exists(filePath)) throw new Exception("Error: report does not exist");
@@ -355,11 +436,13 @@ namespace SealWebServer.Controllers
             }
         }
 
-
+        /// <summary>
+        /// Execute a report and returns the report html display result content (e.g. html with prompted restrictions). Check API of Seal Web Interface for more information.
+        /// </summary>
         [HttpPost]
         public ActionResult SWExecuteReport(string path, bool? render, string viewGUID, string outputGUID)
         {
-            WriteDebug("SWExecuteReport");
+            writeDebug("SWExecuteReport");
             try
             {
                 if (!CheckAuthentication()) return Content(_loginContent);
@@ -386,11 +469,13 @@ namespace SealWebServer.Controllers
             }
         }
 
-
+        /// <summary>
+        /// View a file published in the repository.
+        /// </summary>
         [HttpPost]
         public ActionResult SWViewFile(string path)
         {
-            WriteDebug("SWViewFile");
+            writeDebug("SWViewFile");
             try
             {
                 if (!CheckAuthentication()) return Content(_loginContent);
@@ -406,14 +491,20 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Clear the current user session.
+        /// </summary>
         [HttpPost]
         public ActionResult SWILogout()
         {
-            WriteDebug("SWILogout");
+            writeDebug("SWILogout");
+
+            //Audit
+            Audit.LogAudit(AuditType.Logout, WebUser, null, null);
+
             try
             {
                 if (WebUser != null) WebUser.Logout();
-                CreateWebUser();
                 return Json(new { });
             }
             catch (Exception ex)
@@ -422,18 +513,25 @@ namespace SealWebServer.Controllers
             }
         }
 
-
+        /// <summary>
+        /// Set the culture and the default view (reports or dashboards) for the logged user.
+        /// </summary>
         [HttpPost]
-        public ActionResult SWISetUserProfile(string culture)
+        public ActionResult SWISetUserProfile(string culture, string defaultView)
         {
-            WriteDebug("SWISetUserProfile");
+            writeDebug("SWISetUserProfile");
             try
             {
                 checkSWIAuthentication();
                 if (string.IsNullOrEmpty(culture)) throw new Exception("Error: culture must be supplied");
+                if (culture != Repository.CultureInfo.EnglishName)
+                {
+                    if (!Repository.SetCultureInfo(culture)) throw new Exception("Invalid culture name:" + culture);
+                    WebUser.ClearCache();
+                    setCookie(SealCultureCookieName, culture);
+                }
 
-                if (!Repository.SetCultureInfo(culture)) throw new Exception("Invalid culture name:" + culture);
-                SetCookie(SealCultureCookieName, culture);
+                if (!string.IsNullOrEmpty(defaultView)) setCookie(SealLastViewCookieName, defaultView);
 
                 return Json(new { });
             }
@@ -443,38 +541,62 @@ namespace SealWebServer.Controllers
             }
         }
 
-
+        /// <summary>
+        /// Returns the profile information of the logged user.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIGetUserProfile()
         {
-            WriteDebug("SWIGetUserProfile");
+            writeDebug("SWIGetUserProfile");
             try
             {
-                checkSWIAuthentication();
+                if (WebUser == null || !WebUser.IsAuthenticated) return Json(new { authenticated = false });
 
-                return Json(new SWIUserProfile() { authenticated = true, name = WebUser.Name, group = WebUser.SecurityGroupsDisplay, culture = Repository.CultureInfo.EnglishName, folder = GetCookie(SealLastFolderCookieName) });
+                return Json(new
+                {
+                    authenticated = true,
+                    name = WebUser.Name,
+                    group = WebUser.SecurityGroupsDisplay,
+                    culture = Repository.CultureInfo.EnglishName,
+                    viewtype = WebUser.ViewType
+                });
             }
             catch
             {
                 //not authenticated
-                return Json(new SWIUserProfile() { authenticated = false });
+                return Json(new { authenticated = false });
+            }
+        }
+
+        static object _culturesLock = new object();
+        static List<SWIItem> _cultures = null;
+        static List<SWIItem> Cultures
+        {
+            get
+            {
+                lock (_culturesLock)
+                {
+                    if (_cultures == null)
+                    {
+                        _cultures = new List<SWIItem>();
+                        foreach (var culture in CultureInfo.GetCultures(CultureTypes.AllCultures).OrderBy(i => i.EnglishName))
+                        {
+                            _cultures.Add(new SWIItem() { id = culture.EnglishName, val = culture.NativeName });
+                        }
+                    }
+                }
+                return _cultures;
             }
         }
 
         [HttpPost]
         public ActionResult SWIGetCultures()
         {
-            WriteDebug("SWIGetCultures");
+            writeDebug("SWIGetCultures");
             try
             {
                 checkSWIAuthentication();
-
-                List<SWIItem> vals = new List<SWIItem>();
-                foreach (var culture in CultureInfo.GetCultures(CultureTypes.AllCultures).OrderBy(i => i.EnglishName))
-                {
-                    vals.Add(new SWIItem() { id = culture.EnglishName, val = culture.NativeName });
-                }
-                return Json(vals.ToArray());
+                return Json(Cultures.ToArray());
             }
             catch (Exception ex)
             {
@@ -482,10 +604,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Translate a text either from the public translations or the repository translations. If the optional parameter instance is not empty, the repository translations are used.
+        /// </summary>
         [HttpPost]
         public ActionResult SWITranslate(string context, string instance, string reference)
         {
-            WriteDebug("SWITranslate");
+            writeDebug("SWITranslate");
             try
             {
                 checkSWIAuthentication();
@@ -498,10 +623,13 @@ namespace SealWebServer.Controllers
             }
         }
 
+        /// <summary>
+        /// Returns the version of the Seal Web Interface and the version of the Seal Library.
+        /// </summary>
         [HttpPost]
         public ActionResult SWIGetVersions()
         {
-            WriteDebug("SWIGetVersions");
+            writeDebug("SWIGetVersions");
             try
             {
                 return Json(new { SWIVersion = Repository.ProductVersion, SRVersion = Repository.ProductVersion, Info = Info });
@@ -512,6 +640,377 @@ namespace SealWebServer.Controllers
             }
         }
 
+        #region Dashboard
 
+        Dashboard getDashboard(string guid)
+        {
+            if (string.IsNullOrEmpty(guid)) throw new Exception("Error: guid must be supplied");
+            var d = WebUser.UserDashboards.FirstOrDefault(i => i.GUID == guid);
+            if (d == null) throw new Exception("Error: The dashboard does not exist");
+
+            return d;
+        }
+
+        Dashboard checkDashboardEditRight(string guid)
+        {
+            var d = getDashboard(guid);
+            if (!d.Editable) throw new Exception("Error: no right to edit this dashboard");
+            return d;
+        }
+
+        [HttpPost]
+        public ActionResult SWIGetUserDashboards()
+        {
+            writeDebug("SWIGetUserDashboards");
+            try
+            {
+                checkSWIAuthentication();
+
+                return Json(WebUser.UserDashboards.OrderBy(i => i.Order).ToArray());
+            }
+            catch (Exception ex)
+            {
+                return HandleSWIException(ex);
+            }
+        }
+
+        [HttpPost]
+        public ActionResult SWIGetDashboards()
+        {
+            writeDebug("SWIGetDashboards");
+            try
+            {
+                checkSWIAuthentication();
+
+                //Public Dashboards not selected 
+                return Json(WebUser.GetDashboards().Where(i => !WebUser.Profile.Dashboards.Contains(i.GUID)).OrderBy(i => i.Order).ToArray());
+            }
+            catch (Exception ex)
+            {
+                return HandleSWIException(ex);
+            }
+        }
+
+        [HttpPost]
+        public ActionResult SWIGetDashboardItems(string guid)
+        {
+            writeDebug("SWIGetDashboardItems");
+            try
+            {
+                checkSWIAuthentication();
+
+                if (string.IsNullOrEmpty(guid)) throw new Exception("Error: guid must be supplied");
+
+                var dashboard = WebUser.UserDashboards.FirstOrDefault(i => i.GUID == guid);
+                if (dashboard == null) throw new Exception("Error: The dashboard does not exist");
+
+                foreach (var item in dashboard.Items) item.JSonSerialization = true;
+                return Json(dashboard.Items.OrderBy(i => i.GroupOrder).ThenBy(i => i.GroupName).ThenBy(i => i.Order).ToArray());
+            }
+            catch (Exception ex)
+            {
+                return HandleSWIException(ex);
+            }
+        }
+
+        [HttpPost]
+        public ActionResult SWIGetDashboardItem(string guid, string itemguid)
+        {
+            writeDebug("SWIGetDashboardItems");
+            try
+            {
+                checkSWIAuthentication();
+
+                if (string.IsNullOrEmpty(guid)) throw new Exception("Error: guid must be supplied");
+
+                var dashboard = WebUser.UserDashboards.FirstOrDefault(i => i.GUID == guid);
+                if (dashboard == null) throw new Exception("Error: The dashboard does not exist");
+
+                var item = dashboard.Items.FirstOrDefault(i => i.GUID == itemguid);
+                if (item == null) throw new Exception("Error: The dashboard item does not exist");
+
+                return Json(item);
+            }
+            catch (Exception ex)
+            {
+                return HandleSWIException(ex);
+            }
+        }
+
+        List<ReportExecution> DashboardExecutions
+        {
+            get
+            {
+                List<ReportExecution> result = (List<ReportExecution>)getSessionValue(SessionDashboardExecutions);
+                if (result == null)
+                {
+                    result = new List<ReportExecution>();
+                    setSessionValue(SessionDashboardExecutions,result);
+                }
+                return result;
+            }
+        }
+
+        [HttpPost]
+        public ActionResult SWIAddDashboard(string[] guids)
+        {
+            writeDebug("SWIAddDashboard");
+            try
+            {
+                checkSWIAuthentication();
+
+                if (!CheckAuthentication()) return Content(_loginContent);
+
+                if (!WebUser.ManageDashboards) throw new Exception("No right to add dashboards");
+
+                foreach (var guid in guids) WebUser.Profile.Dashboards.Add(guid);
+                WebUser.SaveProfile();
+
+                return Json(new object { });
+            }
+            catch (Exception ex)
+            {
+                return HandleSWIException(ex);
+            }
+        }
+
+        [HttpPost]
+        public ActionResult SWIRemoveDashboard(string guid)
+        {
+            writeDebug("SWIRemoveDashboard");
+            try
+            {
+                checkSWIAuthentication();
+
+                if (!CheckAuthentication()) return Content(_loginContent);
+
+                if (!WebUser.ManageDashboards) throw new Exception("No right to remove dashboard");
+
+                if (WebUser.Profile.Dashboards.Contains(guid)) WebUser.Profile.Dashboards.Remove(guid);
+                WebUser.SaveProfile();
+
+                return Json(new object { });
+            }
+            catch (Exception ex)
+            {
+                return HandleSWIException(ex);
+            }
+        }
+
+        [HttpPost]
+        public ActionResult SWISwapDashboardOrder(string guid1, string guid2)
+        {
+            writeDebug("SWISwapDashboardOrder");
+            try
+            {
+                checkSWIAuthentication();
+
+                if (!WebUser.ManageDashboards) throw new Exception("No right to swap  dashboard");
+
+                if (WebUser.Profile.Dashboards.Contains(guid1) && WebUser.Profile.Dashboards.Contains(guid2))
+                {
+                    var newDashboards = new List<string>();
+                    foreach (var guid in WebUser.Profile.Dashboards)
+                    {
+                        if (guid == guid1) newDashboards.Add(guid2);
+                        else if (guid == guid2) newDashboards.Add(guid1);
+                        else newDashboards.Add(guid);
+                    }
+                    WebUser.Profile.Dashboards = newDashboards;
+                    WebUser.SaveProfile();
+                }
+                return Json(new object { });
+            }
+            catch (Exception ex)
+            {
+                return HandleSWIException(ex);
+            }
+        }
+
+
+        [HttpPost]
+        public ActionResult SWISetLastDashboard(string guid)
+        {
+            writeDebug("SWISetLastDashboard");
+            try
+            {
+                checkSWIAuthentication();
+                setCookie(SealLastDashboardCookieName, guid);
+                return Json(new object { });
+
+            }
+            catch (Exception ex)
+            {
+                return HandleSWIException(ex);
+            }
+        }
+
+        [HttpPost]
+        public ActionResult SWIGetDashboardResult(string guid, string itemguid, bool force)
+        {
+            writeDebug("SWIGetDashboardResult");
+            try
+            {
+                checkSWIAuthentication();
+
+                if (!CheckAuthentication()) return Content(_loginContent);
+
+                Report report = null;
+                ReportExecution execution = null;
+                Repository repository = null;
+
+                var dashboard = WebUser.UserDashboards.FirstOrDefault(i => i.GUID == guid);
+                if (dashboard == null)
+                {
+                    return Json(new object { });
+                }
+
+                var item = dashboard.Items.FirstOrDefault(i => i.GUID == itemguid);
+                if (item == null) throw new Exception("Error: The item does not exist");
+
+                var widget = DashboardWidgetsPool.Widgets.ContainsKey(item.WidgetGUID) ? DashboardWidgetsPool.Widgets[item.WidgetGUID] : null;
+                if (widget == null) throw new Exception("Error: the widget does not exist");
+
+                /* No check on exec rights for widgets...
+                SWIFolder folder = getParentFolder(widget.ReportPath);
+                if (folder.right == 0) throw new Exception("Error: no right on this folder");
+                */
+                var filePath = Repository.ReportsFolder + widget.ReportPath;
+                if (!System.IO.File.Exists(filePath)) throw new Exception("Error: the report does not exist");
+
+
+                string content = "";
+                ReportView view = null, modelView = null;
+
+                var executions = DashboardExecutions;
+                lock (executions)
+                {
+                    //remove executions older than 2 hours
+                    executions.RemoveAll(i => i.Report.ExecutionEndDate < DateTime.Now.AddHours(-2));
+                    var lastDateTime = System.IO.File.GetLastWriteTime(filePath);
+                    executions.RemoveAll(i => i.Report.FilePath == filePath && i.Report.LastModification != lastDateTime);
+
+                    foreach (var exec in executions.Where(i => i.Report.FilePath == filePath))
+                    {
+                        exec.Report.GetWidgetViewToParse(exec.Report.ExecutionView.Views, widget.GUID, ref view, ref modelView);
+                        if (view != null)
+                        {
+                            execution = exec;
+                            break;
+                        }
+                    }
+                }
+
+                if (execution != null)
+                {
+                    report = execution.Report;
+                }
+                else
+                {
+                    repository = Repository.CreateFast();
+                    report = Report.LoadFromFile(filePath, repository);
+
+                    report.ExecutionContext = ReportExecutionContext.WebReport;
+                    report.SecurityContext = WebUser;
+                    //Force load of all models
+                    //report.ExecutionView.SetParameter(Parameter.ForceModelsLoad, true);
+                    //Set url
+                    report.WebUrl = GetWebUrl(Request, Response);
+                }
+
+                if (view == null) {
+                    report.GetWidgetViewToParse(report.Views, widget.GUID, ref view, ref modelView);
+                }
+
+                if (view == null) throw new Exception("Error: the widget does not exist");
+
+                //Set execution view from the new root...
+                report.CurrentViewGUID = report.GetRootView(view).GUID;
+
+                if (execution != null)
+                {
+                    lock (execution)
+                    {
+                        if (!report.IsExecuting && (force || report.ExecutionEndDate < DateTime.Now.AddSeconds(-1 * report.WidgetCache)))
+                        {
+                            //Disable basics
+                            report.ExecutionView.InitParameters(false);
+                            //Set HTML Format
+                            report.ExecutionView.SetParameter(Parameter.ReportFormatParameter, ReportFormat.html.ToString());
+
+                            execution.Execute();
+                            while (report.IsExecuting) Thread.Sleep(100);
+                        }
+                    }
+                }
+                else
+                {
+                    execution = new ReportExecution() { Report = report };
+                    lock (executions)
+                    {
+                        executions.Add(execution);
+                    }
+                    execution.Execute();
+                    while (report.IsExecuting) Thread.Sleep(100);
+                }
+                if (report.HasErrors)
+                {
+                    WebHelper.WriteWebException(new Exception(report.FilePath + ":\r\n" + report.ExecutionErrors), getContextDetail(Request, WebUser));
+                    throw new Exception("Error: the widget has errors");
+                }
+                //Reset pointers and parse
+                lock (execution)
+                {
+                    try
+                    {
+                        report.Status = ReportStatus.RenderingDisplay;
+                        report.CurrentModelView = modelView;
+                        if (modelView != null && modelView.Model != null && modelView.Model.Pages.Count > 0)
+                        {
+                            report.CurrentPage = modelView.Model.Pages[0];
+                        }
+                        content = view.Parse();
+                    }
+                    finally
+                    {
+                        report.Status = ReportStatus.Executed;
+                    }
+                }
+
+                //Set context for navigation, remove previous, keep root
+                var keys = NavigationContext.Navigations.Where(i => i.Value.Execution.RootReport.ExecutionGUID == report.ExecutionGUID && i.Value.Execution.RootReport != i.Value.Execution.Report).ToArray();
+                foreach (var key in keys) NavigationContext.Navigations.Remove(key.Key);
+                NavigationContext.SetNavigation(execution);
+
+                var result = new
+                {
+                    dashboardguid = guid,
+                    itemguid = itemguid,
+                    executionguid = execution.Report.ExecutionGUID,
+                    path = !string.IsNullOrEmpty(widget.ExecViewGUID) ? widget.ReportPath : "",
+                    viewGUID = widget.ExecViewGUID,
+                    lastexec = Translate("Last execution at") + " " + report.ExecutionEndDate.ToString("G", Repository.CultureInfo),
+                    description = Repository.TranslateWidgetDescription(widget.ReportPath.Replace(Repository.ReportsFolder, Path.DirectorySeparatorChar.ToString()), widget.Description),
+                    dynamic = item.Dynamic,
+                    content = content,
+                    refresh = (item.Refresh == -1 ? report.ExecutionView.GetNumericValue("refresh_rate") : item.Refresh)
+                };
+
+                return Json(result);
+            }
+            catch (Exception ex)
+            {
+                var result = new
+                {
+                    dashboardguid = guid,
+                    itemguid = itemguid,
+                    content = "<b>" + Translate("This Widget has an error. Please consider to remove it from your Dashboard...") + "</b><br><br>" + Helper.ToHtml(ex.Message)
+                };
+
+                return Json(result);
+            }
+        }
+
+        #endregion
     }
 }

@@ -1,22 +1,19 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.IO;
-using RazorEngine;
 using System.Xml.Serialization;
-using Seal.Helpers;
 using System.ComponentModel;
-using System.Drawing.Design;
-using Seal.Converter;
 using DynamicTypeDescriptor;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// A ReportSource is a MetaSource dedicated for a report
+    /// </summary>
     public class ReportSource : MetaSource
     {
         public const string DefaultRepositoryConnectionGUID = "1";
@@ -58,28 +55,28 @@ namespace Seal.Model
         }
         #endregion
 
-        string _metaSourceGUID;
-        public string MetaSourceGUID
-        {
-            get { return _metaSourceGUID; }
-            set { _metaSourceGUID = value; }
-        }
+        /// <summary>
+        /// Unique identifier of the source
+        /// </summary>
+        public string MetaSourceGUID { get; set; }
 
-        private string _metaSourceName;
+        /// <summary>
+        /// Name
+        /// </summary>
         [XmlIgnore]
         [Category("General"), DisplayName("Repository Data Source"), Description("The name of the repository data source"), Id(1, 1)]
-        public string MetaSourceName
-        {
-            get { return _metaSourceName; }
-        }
-        //use to store the default repository connection
+        public string MetaSourceName { get; private set; }
+
+        /// <summary>
+        /// Reference to the default repository connection
+        /// </summary>
         [XmlIgnore]
-        public MetaConnection RepositoryConnection 
+        public MetaConnection RepositoryConnection
         {
-            get 
+            get
             {
                 MetaConnection result = null;
-                if (!string.IsNullOrEmpty(MetaSourceGUID) && Repository != null) 
+                if (!string.IsNullOrEmpty(MetaSourceGUID) && Repository != null)
                 {
                     MetaSource source = Repository.Sources.FirstOrDefault(i => i.GUID == MetaSourceGUID);
                     if (source != null) result = source.Connection;
@@ -88,6 +85,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Current connection
+        /// </summary>
         [XmlIgnore]
         public override MetaConnection Connection
         {
@@ -98,22 +98,21 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Creates a basic ReportSource
+        /// </summary>
         static public ReportSource Create(Repository repository, bool createConnection)
         {
             ReportSource result = new ReportSource() { GUID = Guid.NewGuid().ToString(), Name = "Data Source", Repository = repository };
-            //Add master table
-            MetaTable master = MetaTable.Create();
-            master.DynamicColumns = true;
-            master.IsEditable = true;
-            master.Alias = MetaData.MasterTableName;
-            master.Source = result;
-            result.MetaData.Tables.Add(master);
 
-            if (createConnection) result.AddDefaultConnection(repository); 
+            if (createConnection) result.AddDefaultConnection(repository);
 
             return result;
         }
 
+        /// <summary>
+        /// Load the available MetaSources defined in the repository
+        /// </summary>
         public void LoadRepositoryMetaSources(Repository repository)
         {
             foreach (var connection in Connections)
@@ -141,7 +140,7 @@ namespace Seal.Model
                     IsDefault = source.IsDefault;
                     IsNoSQL = source.IsNoSQL;
                     InitScript = source.InitScript;
-                    _metaSourceName = source.Name;
+                    MetaSourceName = source.Name;
                     foreach (var item in source.Connections)
                     {
                         item.IsEditable = false;
@@ -181,6 +180,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Refresh the enumerated list values
+        /// </summary>
         public void RefreshEnumsOnDbConnection()
         {
             foreach (var itemEnum in MetaData.Enums.Where(i => i.IsDbRefresh))
@@ -197,8 +199,7 @@ namespace Seal.Model
         [XmlIgnore]
         public List<MetaJoin> TempJoins = new List<MetaJoin>();
         [XmlIgnore]
-        public List<MetaEnum> TempEnums = new List<MetaEnum>();    
+        public List<MetaEnum> TempEnums = new List<MetaEnum>();
     }
-
 
 }

@@ -1,19 +1,12 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
-using System.Data;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using Seal.Model;
-using DynamicTypeDescriptor;
-using Seal.Converter;
-using System.IO;
 using Seal.Helpers;
 using Seal.Forms;
 
@@ -198,8 +191,10 @@ namespace Seal.Controls
             ReportElement element = ReportElement.Create();
             element.Source = Model.Source;
             element.Format = column.Format;
+            element.Report = Model.Report;
             element.Model = Model;
             element.MetaColumnGUID = column.GUID;
+            element.MetaColumn = column;
             element.Name = column.Name;
             element.PivotPosition = panel.Position;
             element.SetDefaults();
@@ -403,9 +398,17 @@ namespace Seal.Controls
 
         void initTreeView()
         {
-            TreeViewHelper.InitCategoryTreeNode(elementTreeView.Nodes, Model.Source.MetaData.Tables);
+            var tableList = Model.Source.MetaData.Tables;
+            if (Model.IsSQLModel)
+            {
+                tableList = new List<MetaTable>();
+                tableList.Add(Model.Table);
+            }
+
+            TreeViewHelper.InitCategoryTreeNode(elementTreeView.Nodes, tableList);
             elementTreeView.TreeViewNodeSorter = new NodeSorter(); 
             elementTreeView.Sort();
+            if (Model.IsSQLModel) elementTreeView.ExpandAll();
         }
 
         private void elementTreeView_ItemDrag(object sender, ItemDragEventArgs e)
@@ -512,6 +515,15 @@ namespace Seal.Controls
             }
         }
 
+        public void ReinitSource()
+        {
+            initNoSQL();
+            initTreeView();
+            restrictionsPanel.ModelToRestrictionText();
+            aggregateRestrictionsPanel.ModelToRestrictionText();
+            ElementsToPanels();
+        }
+
         void Grid_PropertyValueChanged(object s, PropertyValueChangedEventArgs e)
         {
             if (s == ModelGrid)
@@ -529,13 +541,15 @@ namespace Seal.Controls
                     if (result == DialogResult.Yes)
                     {
                         initNoSQL();
+                        if (Model.IsSQLModel) Model.RefreshMetaTable(true);
+
                         initTreeView();
                         Model.Elements.Clear();
                         Model.Restrictions.Clear();
                         Model.InitEditor();
                         Model.Restriction = "";
                         Model.AggregateRestrictions.Clear();
-                        Model.AggregateRestriction = "";
+                        Model.AggregateRestriction = "";                    
                         restrictionsPanel.ModelToRestrictionText();
                         aggregateRestrictionsPanel.ModelToRestrictionText();
                         ElementsToPanels();

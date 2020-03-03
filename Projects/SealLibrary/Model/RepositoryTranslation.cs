@@ -1,48 +1,75 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System.Collections.Generic;
 using System.IO;
 using Seal.Helpers;
 using System.Text.RegularExpressions;
+using System.Linq;
+using System;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// A RepositoryTranslation defines a translation got from the repository
+    /// </summary>
     public class RepositoryTranslation
     {
+        /// <summary>
+        /// The context of the translation
+        /// </summary>
         public string Context = "";
+
+        /// <summary>
+        /// The instance of the translation
+        /// </summary>
         public string Instance = "";
+
+        /// <summary>
+        /// The reference text
+        /// </summary>
         public string Reference = "";
+
+        /// <summary>
+        /// List of translation texts per language
+        /// </summary>
         public Dictionary<string, string> Translations = new Dictionary<string, string>();
+
+        /// <summary>
+        /// Usgae counter for debug purpose
+        /// </summary>
         public int Usage;
 
-        static public List<RepositoryTranslation> InitFromCSV(string filePath, bool hasInstance)
+        /// <summary>
+        /// Init the list of RepositoryTranslation from the CSV file
+        /// </summary>
+        static public void InitFromCSV(Dictionary<string, RepositoryTranslation> translations, string path, bool hasInstance)
         {
             try
             {
-                return initFromCSV(filePath, hasInstance);
+                initFromCSV(translations, path, hasInstance);
             }
             catch
             {
-                if (File.Exists(filePath))
+                if (File.Exists(path))
                 {
                     try
                     {
-                        //copy in a temp file to try
-                        string newPath = FileHelper.GetTempUniqueFileName(filePath);
-                        File.Copy(filePath, newPath, true);
-                        return initFromCSV(newPath, hasInstance);
+                        //probably locked with Excel, copy in a temp file to try
+                        string newPath = FileHelper.GetTempUniqueFileName(path);
+                        File.Copy(path, newPath, true);
+                        initFromCSV(translations, newPath, hasInstance);
                     }
-                    catch { }
+                    catch (Exception ex) {
+                        System.Diagnostics.Debug.WriteLine(ex.Message);
+                    }
                 }
             }
-            return new List<RepositoryTranslation>();
         }
-        static private List<RepositoryTranslation> initFromCSV(string filePath, bool hasInstance)
-        {
-            List<RepositoryTranslation> translations = new List<RepositoryTranslation>();
 
+        static private void initFromCSV(Dictionary<string, RepositoryTranslation> translations, string filePath, bool hasInstance)
+        {
             if (File.Exists(filePath))
             {
                 bool isHeader = true;
@@ -75,19 +102,41 @@ namespace Seal.Model
                         }
                         else
                         {
-                            RepositoryTranslation translation = new RepositoryTranslation() { Context = ExcelHelper.FromCsv(collection[0].Value), Reference = ExcelHelper.FromCsv(collection[startCol - 1].Value) };
-                            if (hasInstance) translation.Instance = ExcelHelper.FromCsv(collection[1].Value);
-                            translations.Add(translation);
+                            var context = ExcelHelper.FromCsv(collection[0].Value);
+                            var reference = ExcelHelper.FromCsv(collection[startCol - 1].Value);
+
+                            RepositoryTranslation translation = null;
+                            var key = context + "\r" + reference;
+                            if (hasInstance)
+                            {
+                                var instance = ExcelHelper.FromCsv(collection[1].Value);
+                                key += "\r" + instance;
+                                if (!translations.ContainsKey(key))
+                                {
+                                    translation = new RepositoryTranslation() { Context = context, Reference = reference, Instance = instance };
+                                    translations.Add(key, translation);
+                                }
+                                else translation = translations[key];
+                            }
+                            else
+                            {
+                                if (!translations.ContainsKey(key))
+                                {
+                                    translation = new RepositoryTranslation() { Context = context, Reference = reference };
+                                    translations.Add(key, translation);
+                                }
+                                else translation = translations[key];
+                            }
+
                             for (int i = 0; i < languages.Count && i + startCol < collection.Count; i++)
                             {
-                                if (string.IsNullOrEmpty(languages[i])) continue;
+                                if (string.IsNullOrEmpty(languages[i]) || translation.Translations.ContainsKey(languages[i])) continue;
                                 translation.Translations.Add(languages[i], ExcelHelper.FromCsv(collection[i + startCol].Value));
                             }
                         }
                     }
                 }
             }
-            return translations;
         }
-}
+    }
 }

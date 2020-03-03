@@ -1,24 +1,21 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Drawing.Design;
 using System.ComponentModel;
-using System.Windows.Forms.Design;
 using System.Windows.Forms;
 using Seal.Model;
 using System.Diagnostics;
 using System.IO;
 using Seal.Helpers;
-using System.Threading;
 using System.Security.Principal;
-using System.Net.Mail;
 using System.Data.OleDb;
 using System.Data;
+using System.Text;
 
 namespace Seal.Forms
 {
@@ -37,6 +34,8 @@ namespace Seal.Forms
         Parameter _parameter;
         SealSecurity _security;
         OutputEmailDevice _emailDevice;
+        ReportModel _model;
+        SealServerConfiguration _configuration;
 
         void setContext(ITypeDescriptorContext context)
         {
@@ -51,6 +50,8 @@ namespace Seal.Forms
             _parameter = context.Instance as Parameter;
             _security = context.Instance as SealSecurity;
             _emailDevice = context.Instance as OutputEmailDevice;
+            _model = context.Instance as ReportModel;
+            _configuration = context.Instance as SealServerConfiguration;
         }
 
         void setModified()
@@ -217,8 +218,8 @@ namespace Seal.Forms
                         }
                         else if (_metaColumn.MetaTable.Source.Connection.DatabaseType == DatabaseType.MSSQLServer)
                         {
-                            year.Name = string.Format("select dateadd(dd, -day({0}) + 1, dateadd(mm, -month({0}) + 1, cast({0} as Date)))", _metaColumn.Name);
-                            month.Name = string.Format("select dateadd(dd, -day({0}) + 1, cast({0} as Date))", _metaColumn.Name);
+                            year.Name = string.Format("DATETIME2FROMPARTS(year({0}),1,1,0,0,0,0,0)", _metaColumn.Name);
+                            month.Name = string.Format("DATETIME2FROMPARTS(year({0}),month({0}),1,0,0,0,0,0)", _metaColumn.Name);
                         }
                         else if (_metaColumn.MetaTable.Source.Connection.DatabaseType == DatabaseType.MSAccess)
                         {
@@ -238,7 +239,7 @@ namespace Seal.Forms
                         report.Views.Clear();
                         report.AddView(ReportViewTemplate.ModelDetailName);
                         report.Views[0].InitParameters(true);
-                        report.Views[0].Parameters.First(i => i.Name == "restriction_button").BoolValue = false; 
+                        report.Views[0].Parameters.First(i => i.Name == "restriction_button").BoolValue = false;
 
                         report.Sources.RemoveAll(i => i.MetaSourceGUID != _metaColumn.Source.GUID);
 
@@ -290,7 +291,10 @@ namespace Seal.Forms
                                 }
                             }
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(ex.Message);
+                        }
 
                         string message = "";
                         if (sr.Restrictions.Count == 0)
@@ -338,28 +342,44 @@ namespace Seal.Forms
                         dlg.InitialDirectory = _metaColumn.Source.Repository.SubReportsFolder;
                         if (dlg.ShowDialog() == DialogResult.OK)
                         {
-                            Report report = Report.LoadFromFile(dlg.FileName, _metaColumn.Source.Repository);
+                            Report report = Report.LoadFromFile(dlg.FileName, _metaColumn.Source.Repository, false);
                             var sr = new SubReport() { Path = report.FilePath.Replace(_metaColumn.Source.Repository.RepositoryPath, Repository.SealRepositoryKeyword), Name = Path.GetFileNameWithoutExtension(dlg.FileName) };
 
                             bool tableOk = false;
+                            var restrList = new List<ReportRestriction>();
                             foreach (var model in report.Models.Where(i => i.Source.MetaSourceGUID == _metaColumn.Source.GUID))
                             {
-                                foreach (var restriction in model.Restrictions.Where(i => i.Prompt != PromptType.None))
+                                foreach (var restriction in model.Restrictions)
                                 {
-                                    var col = _metaColumn.MetaTable.Columns.FirstOrDefault(i => i.GUID == restriction.MetaColumnGUID);
-                                    if (col != null) tableOk = true;
-                                    
-                                    sr.Restrictions.Add(col.GUID);
+                                    foreach (var table in _metaColumn.MetaTable.Source.MetaData.Tables)
+                                    {
+                                        var col = table.Columns.FirstOrDefault(i => i.GUID == restriction.MetaColumnGUID);
+                                        if (col != null)
+                                        {
+                                            tableOk = true;
+                                            if (!restrList.Exists(i => i.MetaColumnGUID == restriction.MetaColumnGUID))
+                                            {
+                                                restrList.Add(restriction);
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
-                            if (!tableOk) throw new Exception("Unable to add this Sub-Report:\r\nThe report does no contain any prompted restriction belonging to the table...");
+                            if (!tableOk) throw new Exception("Unable to add this Sub-Report:\r\nThe report does not contain any restriction...");
 
-                            _metaColumn.SubReports.Add(sr);
-                            MessageBox.Show(string.Format("The Sub-Report named '{0}' has been added with {1} restriction(s).", Path.GetFileName(dlg.FileName), sr.Restrictions.Count), "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            var frm = new MultipleSelectForm("Select the restrictions to include", restrList, "DisplayNameEl");
+                            //select all by default
+                            for (int i = 0; i < frm.checkedListBox.Items.Count; i++) frm.checkedListBox.SetItemChecked(i, true);
+                            if (frm.ShowDialog() == DialogResult.OK)
+                            {
+                                foreach (object item in frm.CheckedItems) sr.Restrictions.Add(((ReportRestriction)item).MetaColumnGUID);
+                                _metaColumn.SubReports.Add(sr);
+                                MessageBox.Show(string.Format("The Sub-Report named '{0}' has been added with {1} restriction(s).", Path.GetFileName(dlg.FileName), sr.Restrictions.Count), "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                            _metaColumn.UpdateEditor();
-                            setModified();
+                                _metaColumn.UpdateEditor();
+                                setModified();
+                            }
                         }
                     }
                     else if (context.PropertyDescriptor.Name == "HelperOpenSubReportFolder")
@@ -372,6 +392,31 @@ namespace Seal.Forms
                     if (context.PropertyDescriptor.Name == "HelperCheckJoin")
                     {
                         _metaJoin.CheckJoin();
+                    }
+                }
+                else if (_model != null)
+                {
+                    if (context.PropertyDescriptor.Name == "HelperViewJoins")
+                    {
+                        try
+                        {
+                            _model.JoinPaths = new StringBuilder();
+                            _model.BuildSQL();
+
+                            var frm = new ExecutionForm(null);
+                            frm.Text = "List of Joins";
+                            frm.cancelToolStripButton.Visible = false;
+                            frm.pauseToolStripButton.Visible = false;
+                            frm.logTextBox.Text = _model.JoinPaths.ToString();
+                            frm.logTextBox.SelectionStart = 0;
+                            frm.logTextBox.SelectionLength = 0;
+                            frm.ShowDialog();
+                        }
+                        finally
+                        {
+                            _model.JoinPaths = null;
+                        }
+
                     }
                 }
                 else if (_reportView != null)
@@ -398,6 +443,19 @@ namespace Seal.Forms
                         _reportView.ExcelConverter = null;
                         _reportView.Information = Helper.FormatMessage("The Excel configuration values have been reset");
                         setModified();
+                    }
+                }
+                else if (_configuration != null)
+                {
+                    if (context.PropertyDescriptor.Name == "HelperResetPDFConfigurations")
+                    {
+                        _configuration.PdfConfigurations = new List<string>();
+                        _configuration.PdfConverter = null;
+                    }
+                    else if (context.PropertyDescriptor.Name == "HelperResetExcelConfigurations")
+                    {
+                        _configuration.ExcelConfigurations = new List<string>();
+                        _configuration.ExcelConverter = null;
                     }
                 }
                 else if (_reportSchedule != null)

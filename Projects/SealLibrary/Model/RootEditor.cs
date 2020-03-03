@@ -1,28 +1,38 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using DynamicTypeDescriptor;
 using System.Xml.Serialization;
 using System.ComponentModel;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// Editor component to edit the properties in PropertyGrid
+    /// </summary>
     public class RootEditor
     {
+        protected DynamicCustomTypeDescriptor _dctd = null;
+
         #region Editor
         //Editor
-        protected DynamicCustomTypeDescriptor _dctd = null;
+
+        /// <summary>
+        /// Init the editor objects and the default values
+        /// </summary>
         public virtual void InitEditor()
         {
             Init();
             InitDefaultValues();
         }
 
+        /// <summary>
+        /// Init the editor objects
+        /// </summary>
         public virtual void Init()
         {
             if (_dctd == null) _dctd = ProviderInstaller.Install(this);
@@ -31,6 +41,9 @@ namespace Seal.Model
             UpdateEditorAttributes();
         }
 
+        /// <summary>
+        /// Init the default values
+        /// </summary>
         public void InitDefaultValues()
         {
             foreach (var property in Properties.Where(i => i.IsBrowsable))
@@ -44,6 +57,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Set all properties to readonly
+        /// </summary>
         virtual public void SetReadOnly()
         {
             foreach (var property in Properties) property.SetIsReadOnly(true);
@@ -51,6 +67,9 @@ namespace Seal.Model
 
         private List<CustomPropertyDescriptor> _properties = null;
 
+        /// <summary>
+        /// List of properties of the object
+        /// </summary>
         [XmlIgnore, Browsable(false)]
         protected List<CustomPropertyDescriptor> Properties
         {
@@ -68,11 +87,17 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Get a property descriptor from a property name
+        /// </summary>
         protected CustomPropertyDescriptor GetProperty(string name)
         {
             return Properties.FirstOrDefault(i => i.Name == name);
         }
 
+        /// <summary>
+        /// Refresh properties attrivutes
+        /// </summary>
         protected virtual void UpdateEditorAttributes()
         {
             if (_dctd != null)
@@ -81,6 +106,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Update editor attributes
+        /// </summary>
         public void UpdateEditor()
         {
             UpdateEditorAttributes();

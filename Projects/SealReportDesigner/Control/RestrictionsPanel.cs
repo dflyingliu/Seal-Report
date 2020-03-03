@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -324,8 +324,10 @@ namespace Seal.Controls
                 //Add restriction to current place
                 ReportRestriction restriction = ReportRestriction.CreateReportRestriction();
                 restriction.Source = ModelPanel.Model.Source;
+                restriction.Report = ModelPanel.Model.Report;
                 restriction.Model = ModelPanel.Model;
                 restriction.MetaColumnGUID = column.GUID;
+                restriction.MetaColumn = column;
                 restriction.Name = column.Name;
                 //Set PivotPos for aggregate restrictions
                 restriction.PivotPosition = IsAggregate ? PivotPosition.Data : PivotPosition.Row;
@@ -342,6 +344,7 @@ namespace Seal.Controls
                     restriction.DisplayName = initialName + " " + index.ToString();
                 }
                 Restrictions.Add(restriction);
+                restriction.DisplayOrder = Restrictions.Count;
 
                 if (forPrompt)
                 {

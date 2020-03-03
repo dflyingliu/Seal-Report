@@ -1,14 +1,10 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Drawing.Design;
 using System.ComponentModel;
-using System.Windows.Forms.Design;
 using System.Windows.Forms;
 using Seal.Model;
 using System.ComponentModel.Design;
@@ -59,6 +55,17 @@ namespace Seal.Forms
             if (CollectionItemType == typeof(ReportRestriction))
             {
                 frmCollectionEditorForm.Text = "Restrictions Collection Editor";
+                if (Context.Instance is ReportModel)
+                {
+                    var model = Context.Instance as ReportModel;
+                    model.InitCommonRestrictions();
+                }
+                else if (Context.Instance is Report)
+                {
+                    allowAdd = true;
+                    allowRemove = true;
+                    frmCollectionEditorForm.Text = "Report Input Values Collection Editor";
+                }
             }
             else if (CollectionItemType == typeof(OutputParameter))
             {
@@ -115,6 +122,20 @@ namespace Seal.Forms
                 allowRemove = true;
                 _useHandlerInterface = false;
             }
+            else if (CollectionItemType == typeof(SecurityWidget))
+            {
+                frmCollectionEditorForm.Text = "Security Widgets Collection Editor";
+                allowAdd = true;
+                allowRemove = true;
+                _useHandlerInterface = false;
+            }
+            else if (CollectionItemType == typeof(SecurityDashboardFolder))
+            {
+                frmCollectionEditorForm.Text = "Security Dashboard Folders Collection Editor";
+                allowAdd = true;
+                allowRemove = true;
+                _useHandlerInterface = false;
+            }
             else if (CollectionItemType == typeof(SubReport))
             {
                 frmCollectionEditorForm.Text = "Sub-Reports Collection Editor";
@@ -132,6 +153,13 @@ namespace Seal.Forms
                 allowAdd = true;
                 allowRemove = true;
                 _useHandlerInterface = (TemplateTextEditor.CurrentEntity is Report);
+            }
+            else if (CollectionItemType == typeof(SealServerConfiguration.FileReplacePattern))
+            {
+                frmCollectionEditorForm.Text = "File Patterns Collection Editor";
+                allowAdd = true;
+                allowRemove = true;
+                _useHandlerInterface = false;
             }
 
             TableLayoutPanel tlpLayout = frmCollectionEditorForm.Controls[0] as TableLayoutPanel;
@@ -181,9 +209,9 @@ namespace Seal.Forms
         void propertyGrid_PropertyValueChanged(object sender, PropertyValueChangedEventArgs e)
         {
             // Fire our customized collection event...
-            if (EntityCollectionEditor.MyPropertyValueChanged != null)
+            if (MyPropertyValueChanged != null)
             {
-                EntityCollectionEditor.MyPropertyValueChanged(this, e);
+                MyPropertyValueChanged(this, e);
             }
             SetModified();
         }
@@ -195,6 +223,17 @@ namespace Seal.Forms
             object instance = Activator.CreateInstance(itemType, true);
             SetModified();
             if (_component != null) _component.UpdateEditor();
+
+            if (instance is ReportRestriction && Context.Instance is Report)
+            {
+                var result = ReportRestriction.CreateReportRestriction();
+                result.TypeRe = ColumnType.Text;
+                result.Operator = Operator.Equal;
+                result.ChangeOperator = false;
+                result.Report = (Report)Context.Instance;
+                instance = result;
+            }
+
             return instance;
         }
 
@@ -209,17 +248,26 @@ namespace Seal.Forms
         {
             string result = "";
             if (value is RootEditor) ((RootEditor)value).InitEditor();
-            if (value is ReportRestriction) result = string.Format("{0} ({1})", ((ReportRestriction)value).DisplayNameEl, ((ReportRestriction)value).Model.Name);
+            if (value is ReportRestriction)
+            {
+                var restr = value as ReportRestriction;
+                if (restr.MetaColumn == null && string.IsNullOrEmpty(restr.Name)) result = restr.DisplayNameEl; //Report input value
+                else if (restr.MetaColumn == null) result = restr.Name; //Common restriction
+                else if (restr.Model != null)  result = string.Format("{0} ({1})", restr.DisplayNameEl, restr.Model.Name);
+            }
             else if (value is Parameter) result = ((Parameter)value).DisplayName;
             else if (value is SecurityGroup) result = ((SecurityGroup)value).Name;
             else if (value is SecurityFolder) result = ((SecurityFolder)value).Path;
             else if (value is SecurityColumn) result = ((SecurityColumn)value).DisplayName;
             else if (value is SecuritySource) result = ((SecuritySource)value).DisplayName;
             else if (value is SecurityDevice) result = ((SecurityDevice)value).DisplayName;
+            else if (value is SecurityWidget) result = ((SecurityWidget)value).DisplayName;
+            else if (value is SecurityDashboardFolder) result = ((SecurityDashboardFolder)value).DisplayName;
             else if (value is SecurityConnection) result = ((SecurityConnection)value).DisplayName;
             else if (value is SubReport) result = ((SubReport)value).Name;
             else if (value is ReportComponent) result = ((ReportComponent)value).Name;
             else if (value is CommonScript) result = ((CommonScript)value).Name;
+            else if (value is SealServerConfiguration.FileReplacePattern) result = ((SealServerConfiguration.FileReplacePattern)value).ToString();
             return base.GetDisplayText(string.IsNullOrEmpty(result) ? "<Empty Name>" : result);
         }
     }

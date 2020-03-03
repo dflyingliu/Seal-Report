@@ -47,16 +47,22 @@ temp/
 Assemblies/
 Logs/
 SpecialFolders/
+Projects/SealDocumentation/Help/
 
 #web report editor files
-SealEditor.sln
+SealEditor*.sln
 SealWebServerEditor.*
 HomeControllerSWIEditor.cs
 SWIReportModels.cs
 swi-properties.*
 swi-editor.*
+swi-dashboard-editor.*
 swi-button-group.*
 swi.js
+MainEditor.cshtml
+DataTableEditor*.cshtml
+_ed.*.css
+_ed.*.js
 
 # =========================
 # Operating System Files
@@ -83,4 +89,7 @@ Network Trash Folder
 Temporary Items
 .apdisk
 /Repository/Devices/Email/Email Device Test.scfx
-Repository/Sources/HIS2.scfx
+Repository/Sources/TEST_*.scfx
+MenuBig.cshtml
+Repository/Databases/Audit.ldb
+*.ldb

@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -18,6 +18,9 @@ using System.Text;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// Main worker class that handles a report execution and rendering.
+    /// </summary>
     public class ReportExecution
     {
         //Actions Keywords...
@@ -39,6 +42,8 @@ namespace Seal.Model
         public const string ActionSetUserInfo = "ActionSetUserInfo";
         public const string ActionGetNavigationLinks = "ActionGetNavigationLinks";
         public const string ActionGetTableData = "ActionGetTableData";
+        public const string ActionGetEnumValues = "ActionGetEnumValues";
+        public const string ActionUpdateEnumValues = "ActionUpdateEnumValues";
 
         //Html Ids Keywords
         public const string HtmlId_header_form = "header_form";
@@ -50,17 +55,47 @@ namespace Seal.Model
         public const string HtmlId_parameter_view_name = "parameter_view_name";
         public const string HtmlId_parameter_view_value = "parameter_view_value";
         public const string HtmlId_navigation_id = "navigation_id";
+        public const string HtmlId_navigation_parameters = "navigation_parameters";
         public const string HtmlId_execution_guid = "execution_guid";
         public const string HtmlId_navigation_menu = "nav_menu";
         public const string HtmlId_parameter_tableload = "parameter_tableload";
         public const string HtmlId_viewid_tableload = "viewid_tableload";
         public const string HtmlId_pageid_tableload = "pageid_tableload";
+        public const string HtmlId_id_enumload = "id_enumload";
+        public const string HtmlId_values_enumload = "values_enumload";
+        public const string HtmlId_filter_enumload = "filter_enumload";
+        public const string HtmlId_parameter_enumload = "parameter_enumload";
 
+        /// <summary>
+        /// Current report being executed
+        /// </summary>
         public Report Report = null;
+
+        /// <summary>
+        /// Root report when navigation has occured
+        /// </summary>
         public Report RootReport = null;
+
+        /// <summary>
+        /// The parameter used if the execution was for a navigation
+        /// </summary>
+        public string NavigationParameter = null;
+
+        /// <summary>
+        /// Object that can be used at run-time for any purpose
+        /// </summary>
+        public object Tag;
+
+        /// <summary>
+        /// If true, default report restriction values not specified are kept when the report is executed from SWI 
+        /// </summary>
+        public bool UseDefaultRestrictions = false;
 
         Thread _executeThread;
 
+        /// <summary>
+        /// Render the report and returns the result
+        /// </summary>
         public string Render()
         {
             //Render report
@@ -85,6 +120,9 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Render the report result and convert it if necessary in Excel or PDF format
+        /// </summary>
         public void RenderResult()
         {
             string result = "";
@@ -137,6 +175,7 @@ namespace Seal.Model
                 catch (Exception ex)
                 {
                     Report.ExecutionErrors = ex.Message;
+                    if (ex.InnerException != null) Report.ExecutionErrors += "\r\n" + ex.InnerException.Message;
                 }
                 Report.PdfConversion = false;
             }
@@ -156,11 +195,14 @@ namespace Seal.Model
                 catch (Exception ex)
                 {
                     Report.ExecutionErrors = ex.Message;
+                    if (ex.InnerException != null) Report.ExecutionErrors += "\r\n" + ex.InnerException.Message;
                 }
             }
         }
 
-
+        /// <summary>
+        /// Render only the HTML result for display 
+        /// </summary>
         public void RenderHTMLDisplay()
         {
             Report.Status = ReportStatus.RenderingDisplay;
@@ -174,6 +216,9 @@ namespace Seal.Model
             File.WriteAllText(Report.HTMLDisplayFilePath, result, Encoding.UTF8);
         }
 
+        /// <summary>
+        /// Render the HTML display for the Web Server
+        /// </summary>
         public void RenderHTMLDisplayForViewer()
         {
             string result = Render();
@@ -182,7 +227,9 @@ namespace Seal.Model
             File.WriteAllText(Report.HTMLDisplayFilePath, result, Encoding.UTF8);
         }
 
-
+        /// <summary>
+        /// Execute the current report
+        /// </summary>
         public void Execute()
         {
             Report.ExecutionMessages = "";
@@ -193,6 +240,10 @@ namespace Seal.Model
             if (Report.HasErrors)
             {
                 Report.Cancel = true;
+                //Audit
+                if (Report.ExecutionContext != ReportExecutionContext.TaskScheduler) Audit.LogAudit(AuditType.ReportExecution, Report.SecurityContext, Report, null);
+                //Log files
+                Report.LogExecution();
             }
             else
             {
@@ -216,15 +267,23 @@ namespace Seal.Model
             {
                 try
                 {
-                    if (Report.ExecutionContext != ReportExecutionContext.TaskScheduler && !Report.CheckingExecution && !Report.IsNavigating)
+                    if (Report.InputRestrictions.Count > 0 && Report.ExecutionContext != ReportExecutionContext.TaskScheduler && !Report.CheckingExecution && !Report.IsNavigating)
                     {
                         //check input restrictions
                         CheckInputRestrictions();
                     }
 
-                    executeTasks();
+                    //Init taks progression
+                    foreach (var task in Report.Tasks) task.Progression = 0;
+
+                    //Tasks before model
+                    executeTasks(ExecutionStep.BeforeModel);
+
                     //Build models
                     if (!Report.Cancel) buildModels();
+
+                    //Tasks before rendering
+                    executeTasks(ExecutionStep.BeforeRendering);
                 }
                 catch (Exception ex)
                 {
@@ -233,16 +292,19 @@ namespace Seal.Model
                 //Render report
                 Report.ExecutionRenderingDate = DateTime.Now;
                 //Render first to get the result file, necessary if new extension or for output
-                if (!Report.IsBasicHTMLWithNoOutput)
+                if (!Report.Cancel && !Report.IsBasicHTMLWithNoOutput)
                 {
                     RenderResult();
                     Report.LogMessage("Report result generated in '{0}'", Report.DisplayResultFilePath);
                 }
 
-                if (Report.OutputToExecute != null)
+                if (!Report.Cancel && Report.OutputToExecute != null)
                 {
                     if (!Report.HasErrors)
                     {
+                        //Tasks before output
+                        executeTasks(ExecutionStep.BeforeOutput);
+
                         ProcessOutput();
                     }
                     else
@@ -258,6 +320,9 @@ namespace Seal.Model
                     //Generate Display HTML
                     RenderHTMLDisplay();
                 }
+
+                //Tasks after execution
+                executeTasks(ExecutionStep.AfterExecution);
 
                 //Open external result viewer
                 if (!Report.HasErrors && !Report.ForOutput && Report.ExecutionContext == ReportExecutionContext.DesignerReport && !Report.CheckingExecution && Report.HasExternalViewer)
@@ -275,10 +340,16 @@ namespace Seal.Model
                 Debug.WriteLine(string.Format("ExecuteThread {0} {1}", Report.Status, Report.ExecutionGUID));
                 Report.ExecutionEndDate = DateTime.Now;
 
+                //Audit
+                if (Report.ExecutionContext != ReportExecutionContext.TaskScheduler) Audit.LogAudit(AuditType.ReportExecution, Report.SecurityContext, Report, null);
+                //Log files
                 Report.LogExecution();
             }
         }
 
+        /// <summary>
+        /// Add an execution error
+        /// </summary>
         public void SetError(string error, params object[] args)
         {
             //strings are supposed to be thread-safe...
@@ -302,8 +373,8 @@ namespace Seal.Model
         {
             foreach (var v in ReportRestriction.GetVals(val))
             {
-                Double result;
-                if (!Double.TryParse(v, out result))
+                double d;
+                if (!Helper.ValidateNumeric(v, out d))
                 {
                     report.HasValidationErrors = true;
                     report.ExecutionErrors += string.Format("{0}: '{1}'\r\n", report.Translate("Invalid numeric value"), v);
@@ -313,19 +384,37 @@ namespace Seal.Model
             return true;
         }
 
-
-        public static void SetRestrictions(Report report, ReportRestriction restriction, string val1, string val2, string val3, string val4, bool checkRequired)
+        /// <summary>
+        /// Set restriction values from input 1,2,3,4
+        /// </summary>
+        public static void SetRestrictions(Report report, ReportRestriction restriction, string val1, string val2, string val3, string val4, bool checkRequired, bool useDefaultRestrictions)
         {
             string dateMessage = report.Translate("Use the date format '{0}' or one of the following keywords:", report.CultureInfo.DateTimeFormat.ShortDatePattern) + " " + report.DateKeywordsList;
 
             DateTime dt;
+
+            if (useDefaultRestrictions && string.IsNullOrEmpty(val1))
+                val1 = restriction.Value1;
+
             string val = val1;
             if (restriction.IsDateTime)
             {
                 if (string.IsNullOrEmpty(val))
                 {
-                    restriction.Date1 = DateTime.MinValue;
-                    restriction.Date1Keyword = "";
+                    if (useDefaultRestrictions)
+                    {
+                        if (DateTime.MinValue.Equals(restriction.Date1))
+                            restriction.Date1Keyword = "";
+                        else
+                            val = restriction.Date1.ToString();
+                    }
+                    else
+                    {
+                        restriction.Date1 = DateTime.MinValue;
+                        restriction.Date1Keyword = "";
+                    }
+
+
                 }
                 else if (DateTime.TryParse(val, report.CultureInfo, DateTimeStyles.None, out dt))
                 {
@@ -341,7 +430,7 @@ namespace Seal.Model
             else restriction.Value1 = val;
 
             //check required flag
-            if (string.IsNullOrEmpty(val) && restriction.Required)
+            if (checkRequired && restriction.Required && string.IsNullOrEmpty(val))
             {
                 report.HasValidationErrors = true;
                 report.ExecutionErrors += string.Format("{0} '{1}'\r\n", report.Translate("A value is required for"), restriction.DisplayNameElTranslated);
@@ -349,13 +438,36 @@ namespace Seal.Model
 
             if (restriction.Prompt != PromptType.PromptOneValue)
             {
+                if (useDefaultRestrictions && string.IsNullOrEmpty(val2))
+                    val2 = restriction.Value2;
+
+                if (useDefaultRestrictions && string.IsNullOrEmpty(val3))
+                    val3 = restriction.Value3;
+                if (useDefaultRestrictions && string.IsNullOrEmpty(val4))
+                    val4 = restriction.Value4;
+
                 val = val2;
+                //check required flag
+                if (restriction.Prompt == PromptType.PromptTwoValues && checkRequired && restriction.Required && string.IsNullOrEmpty(val))
+                {
+                    report.HasValidationErrors = true;
+                    report.ExecutionErrors += string.Format("{0} '{1}'\r\n", report.Translate("A value is required for"), restriction.DisplayNameElTranslated);
+                }
+
                 if (restriction.IsDateTime)
                 {
                     if (string.IsNullOrEmpty(val))
                     {
-                        restriction.Date2 = DateTime.MinValue;
-                        restriction.Date2Keyword = "";
+                        if (useDefaultRestrictions)
+                        {
+                            if (DateTime.MinValue.Equals(restriction.Date2))
+                                restriction.Date2Keyword = "";
+                        }
+                        else
+                        {
+                            restriction.Date2 = DateTime.MinValue;
+                            restriction.Date2Keyword = "";
+                        }
                     }
                     else if (DateTime.TryParse(val, report.CultureInfo, DateTimeStyles.None, out dt))
                     {
@@ -370,93 +482,139 @@ namespace Seal.Model
                 }
                 else restriction.Value2 = val;
 
-                val = val3;
-                if (restriction.IsDateTime)
+                if (restriction.Prompt != PromptType.PromptTwoValues)
                 {
-                    if (string.IsNullOrEmpty(val))
+                    val = val3;
+                    if (restriction.IsDateTime)
                     {
-                        restriction.Date3 = DateTime.MinValue;
-                        restriction.Date3Keyword = "";
+                        if (string.IsNullOrEmpty(val))
+                        {
+                            if (useDefaultRestrictions)
+                            {
+                                if (DateTime.MinValue.Equals(restriction.Date3))
+                                    restriction.Date3Keyword = "";
+                            }
+                            else
+                            {
+                                restriction.Date3 = DateTime.MinValue;
+                                restriction.Date3Keyword = "";
+                            }
+                        }
+                        else if (DateTime.TryParse(val, report.CultureInfo, DateTimeStyles.None, out dt))
+                        {
+                            restriction.Date3Keyword = "";
+                            restriction.Date3 = dt;
+                        }
+                        else if (validateDateKeyword(report, val, dateMessage)) restriction.Date3Keyword = report.TranslateDateKeywordsToEnglish(val);
                     }
-                    else if (DateTime.TryParse(val, report.CultureInfo, DateTimeStyles.None, out dt))
+                    else if (restriction.IsNumeric)
                     {
-                        restriction.Date3Keyword = "";
-                        restriction.Date3 = dt;
+                        if (string.IsNullOrEmpty(val) || validateNumeric(report, val)) restriction.Value3 = val;
                     }
-                    else if (validateDateKeyword(report, val, dateMessage)) restriction.Date3Keyword = report.TranslateDateKeywordsToEnglish(val);
-                }
-                else if (restriction.IsNumeric)
-                {
-                    if (string.IsNullOrEmpty(val) || validateNumeric(report, val)) restriction.Value3 = val;
-                }
-                else restriction.Value3 = val;
+                    else restriction.Value3 = val;
 
-                val = val4;
-                if (restriction.IsDateTime)
-                {
-                    if (string.IsNullOrEmpty(val))
+                    val = val4;
+                    if (restriction.IsDateTime)
                     {
-                        restriction.Date4 = DateTime.MinValue;
-                        restriction.Date4Keyword = "";
+                        if (string.IsNullOrEmpty(val))
+                        {
+                            if (useDefaultRestrictions)
+                            {
+                                if (DateTime.MinValue.Equals(restriction.Date4))
+                                    restriction.Date4Keyword = "";
+                            }
+                            else
+                            {
+                                restriction.Date4 = DateTime.MinValue;
+                                restriction.Date4Keyword = "";
+                            }
+                        }
+                        else if (DateTime.TryParse(val, report.CultureInfo, DateTimeStyles.None, out dt))
+                        {
+                            restriction.Date4Keyword = "";
+                            restriction.Date4 = dt;
+                        }
+                        else if (validateDateKeyword(report, val, dateMessage)) restriction.Date4Keyword = report.TranslateDateKeywordsToEnglish(val);
                     }
-                    else if (DateTime.TryParse(val, report.CultureInfo, DateTimeStyles.None, out dt))
+                    else if (restriction.IsNumeric)
                     {
-                        restriction.Date4Keyword = "";
-                        restriction.Date4 = dt;
+                        if (string.IsNullOrEmpty(val) || validateNumeric(report, val)) restriction.Value4 = val;
                     }
-                    else if (validateDateKeyword(report, val, dateMessage)) restriction.Date4Keyword = report.TranslateDateKeywordsToEnglish(val);
+                    else restriction.Value4 = val;
                 }
-                else if (restriction.IsNumeric)
-                {
-                    if (string.IsNullOrEmpty(val) || validateNumeric(report, val)) restriction.Value4 = val;
-                }
-                else restriction.Value4 = val;
             }
         }
 
+
+        void setRestriction(ReportRestriction restriction)
+        {
+            string val = Report.GetInputRestriction(restriction.OperatorHtmlId);
+            if (!string.IsNullOrEmpty(val) && restriction.ChangeOperator)
+            {
+                //Change operator only if allowed and not value only
+                if (val != Operator.ValueOnly.ToString()) restriction.Operator = (Operator)Enum.Parse(typeof(Operator), val);
+            }
+            if (restriction.IsEnum)
+            {
+                List<string> selected_enum = new List<string>();
+                foreach (var enumVal in restriction.EnumRE.Values)
+                {
+                    val = Report.GetInputRestriction(restriction.OptionHtmlId + enumVal.HtmlId);
+                    if (val.ToLower() == "true")
+                    {
+                        selected_enum.Add(enumVal.Id);
+                        //Only one restriction
+                        if (restriction.Prompt == PromptType.PromptOneValue) break;
+                        //Only 2 restrictions
+                        if (restriction.Prompt == PromptType.PromptTwoValues && selected_enum.Count == 2) break;
+                    }
+                }
+                if (selected_enum.Count > 0)
+                    restriction.EnumValues = selected_enum;
+                else if (!UseDefaultRestrictions)
+                    restriction.EnumValues.Clear();
+
+                //check required flag
+                if (restriction.EnumValues.Count == 0 && restriction.Required)
+                {
+                    Report.HasValidationErrors = true;
+                    Report.ExecutionErrors += string.Format("{0} '{1}'\r\n", Report.Translate("A value is required for"), restriction.DisplayNameElTranslated);
+                }
+            }
+            else
+            {
+                SetRestrictions(Report, restriction,
+                       Report.GetInputRestriction(restriction.ValueHtmlId + "_1"),
+                       Report.GetInputRestriction(restriction.ValueHtmlId + "_2"),
+                       Report.GetInputRestriction(restriction.ValueHtmlId + "_3"),
+                       Report.GetInputRestriction(restriction.ValueHtmlId + "_4"),
+                       true,
+                       UseDefaultRestrictions
+                       );
+            }
+        }
+
+        /// <summary>
+        /// Check the current input restriction values
+        /// </summary>
         public void CheckInputRestrictions()
         {
             try
             {
+                foreach (ReportRestriction restriction in Report.ExecutionInputValues.Where(i => i.Prompt != PromptType.None))
+                {
+                    setRestriction(restriction);
+                }
+
                 foreach (ReportModel model in Report.ExecutionModels)
                 {
-                    foreach (ReportRestriction restriction in model.ExecutionRestrictions.Where(i => i.Prompt != PromptType.None).Union(model.ExecutionAggregateRestrictions.Where(i => i.Prompt != PromptType.None)))
+                    foreach (ReportRestriction restriction in model
+                        .ExecutionRestrictions.Where(i => i.Prompt != PromptType.None)
+                        .Union(model.ExecutionAggregateRestrictions.Where(i => i.Prompt != PromptType.None))
+                        .Union(model.ExecutionCommonRestrictions.Where(i => i.Prompt != PromptType.None))
+                        )
                     {
-                        string val = Report.GetInputRestriction(restriction.OperatorHtmlId);
-                        if (!string.IsNullOrEmpty(val)) restriction.Operator = (Operator)Enum.Parse(typeof(Operator), val);
-
-                        if (restriction.IsEnum)
-                        {
-                            restriction.EnumValues.Clear();
-                            for (int i = 0; i < restriction.EnumRE.Values.Count; i++)
-                            {
-                                var enumVal = restriction.EnumRE.Values[i];
-                                val = Report.GetInputRestriction(restriction.OptionHtmlId + i.ToString());
-                                if (val.ToLower() == "true")
-                                {
-                                    restriction.EnumValues.Add(enumVal.Id);
-                                    //Check only one restriction
-                                    if (restriction.Prompt == PromptType.PromptOneValue) break;
-                                }
-                            }
-
-                            //check required flag
-                            if (restriction.EnumValues.Count == 0 && restriction.Required)
-                            {
-                                Report.HasValidationErrors = true;
-                                Report.ExecutionErrors += string.Format("{0} '{1}'\r\n", Report.Translate("A value is required for"), restriction.DisplayNameElTranslated);
-                            }
-                        }
-                        else
-                        {
-                            SetRestrictions(Report, restriction,
-                                   Report.GetInputRestriction(restriction.ValueHtmlId + "_1"),
-                                   Report.GetInputRestriction(restriction.ValueHtmlId + "_2"),
-                                   Report.GetInputRestriction(restriction.ValueHtmlId + "_3"),
-                                   Report.GetInputRestriction(restriction.ValueHtmlId + "_4"),
-                                   true
-                                   );
-                        }
+                        setRestriction(restriction);
                     }
                 }
             }
@@ -558,21 +716,21 @@ namespace Seal.Model
             }
         }
 
-        void executeTasks()
+        void executeTasks(ExecutionStep step)
         {
-            if (Report.CheckingExecution) return;
-
-            Report.LogMessage("Executing report tasks...");
-
-            var tasks = Report.ExecutionTasks;
-            foreach (var task in tasks) task.Progression = 0;
+            var tasks = Report.ExecutionTasks.Where(i => i.Step == step).OrderBy(i => i.SortOrder).ToList();
+            if (tasks.Count > 0)
+            {
+                Report.LogMessage("Executing report tasks for step '{0}'...", Helper.GetEnumDescription(typeof(ExecutionStep), step));
+            }
 
             //Temp list to avoid dynamic changes during the task
-            foreach (var task in tasks.OrderBy(i => i.SortOrder))
+            foreach (var task in tasks)
             {
                 try
                 {
                     if (Report.TaskToExecute != null && task != Report.TaskToExecute) continue; //Exec only one task
+                    if (!task.Enabled) continue;
 
                     Report.LogMessage("Starting task '{0}'", task.Name);
                     Thread thread = new Thread(TaskExecuteThread);
@@ -785,6 +943,12 @@ namespace Seal.Model
             foreach (ResultPage page in model.Pages)
             {
                 if (Report.Cancel) break;
+                //If we have rows and columns OR if there are cell scripts, we have to resort the rows and columns as the SQL cannot do that directly...
+                if ((page.Rows.Count > 0 && page.Columns.Count > 0) || model.Elements.Count(e => !string.IsNullOrEmpty(e.CellScript) && e.IsSorted) > 0)
+                {
+                    if (ResultCell.ShouldSort(page.Rows)) page.Rows.Sort(ResultCell.CompareCells);
+                    if (ResultCell.ShouldSort(page.Columns)) page.Columns.Sort(ResultCell.CompareCells);
+                }
 
                 //Summary table values
                 if (model.Pages.Count > 1) model.SummaryTable.Lines.Add(page.Pages);
@@ -1388,8 +1552,8 @@ namespace Seal.Model
                 //If we have rows and columns ...
                 if (page.Rows.Count > 0 && page.Columns.Count > 0)
                 {
-                    page.Rows.Sort(ResultCell.CompareCells);
-                    page.Columns.Sort(ResultCell.CompareCells);
+                    if (ResultCell.ShouldSort(page.Rows)) page.Rows.Sort(ResultCell.CompareCells);
+                    if (ResultCell.ShouldSort(page.Columns)) page.Columns.Sort(ResultCell.CompareCells);
                 }
             }
         }
@@ -1400,23 +1564,19 @@ namespace Seal.Model
             model.UpdateFinalSortOrders();
             foreach (var page in model.Pages)
             {
-                //If we have rows and columns OR if there are cell scripts, we have to resort the rows and columns as the SQL cannot do that directly...
-                if ((page.Rows.Count > 0 && page.Columns.Count > 0) || model.Elements.Count(e => !string.IsNullOrEmpty(e.CellScript) && e.IsSorted) > 0)
-                {
-                    page.Rows.Sort(ResultCell.CompareCells);
-                    page.Columns.Sort(ResultCell.CompareCells);
-                }
                 //Sort also series axis
                 if (model.HasSerie)
                 {
-                    page.PrimaryXDimensions.Sort(ResultCell.CompareCells);
-                    page.SecondaryXDimensions.Sort(ResultCell.CompareCells);
+                    if (ResultCell.ShouldSort(page.PrimaryXDimensions)) page.PrimaryXDimensions.Sort(ResultCell.CompareCells);
+                    if (ResultCell.ShouldSort(page.SecondaryXDimensions)) page.SecondaryXDimensions.Sort(ResultCell.CompareCells);
 
-                    page.Series.Sort(ResultSerie.CompareSeries);
+                    if (page.Series.Count > 0 && page.Series[0].SplitterCells != null)
+                    {
+                        if (ResultCell.ShouldSort(page.Series[0].SplitterCells)) page.Series.Sort(ResultSerie.CompareSeries);
+                    }
                 }
             }
         }
-
 
         int FindDimension(ResultCell[] valuesToFind, List<ResultCell[]> valuesList)
         {
@@ -1640,7 +1800,7 @@ namespace Seal.Model
                 {
                     MailMessage message = new MailMessage();
                     message.From = new MailAddress(Helper.IfNullOrEmpty(from, device.SenderEmail));
-                    device.AddEmailAddresses(message.To, to);
+                    Helper.AddEmailAddresses(message.To, to);
                     message.Subject = subject;
                     message.Body = body;
                     SmtpClient client = device.SmtpClient;
@@ -1690,6 +1850,10 @@ namespace Seal.Model
                     {
                         Thread.Sleep(100);
                     }
+
+                    //Audit
+                    Audit.LogAudit(AuditType.ReportExecution, report.SecurityContext, report, schedule);
+
                     if (report.HasErrors)
                     {
                         string errorMessage = string.Format("Error: Schedule '{0}' has been executed with errors.\r\nReport '{1}'\r\n{2}\r\n", schedule.Name, report.FilePath, report.ExecutionErrors);
@@ -1726,6 +1890,7 @@ namespace Seal.Model
                     else
                     {
                         Helper.WriteLogEntryScheduler(EventLogEntryType.Information, "Schedule '{0}' has been executed\r\nReport '{1}\r\n{2}", schedule.Name, report.FilePath, report.ExecutionMessages);
+
                         if (!string.IsNullOrEmpty(schedule.NotificationEmailTo) && !report.Cancel)
                         {
                             //information email
@@ -1736,6 +1901,8 @@ namespace Seal.Model
                         break;
                     }
                 }
+
+                FileHelper.PurgeTempApplicationDirectory();
             }
             catch (Exception ex)
             {
@@ -1748,8 +1915,8 @@ namespace Seal.Model
         {
             Report.IsNavigating = false;
             var originalFormat = Report.Format;
-            string newPath = FileHelper.GetUniqueFileName(Path.Combine(Report.GenerationFolder, Path.GetFileNameWithoutExtension(Report.ResultFileName) + ".htm"));
- 
+            string newPath = FileHelper.GetUniqueFileName(Path.Combine(Report.GenerationFolder, Path.GetFileNameWithoutExtension(Report.ResultFileName) + ".html"));
+
             Parameter paginationParameter = Report.ExecutionView.Parameters.FirstOrDefault(i => i.Name == Parameter.ServerPaginationParameter);
             bool initialValue = (paginationParameter != null ? paginationParameter.BoolValue : false);
             try
@@ -1757,11 +1924,14 @@ namespace Seal.Model
                 Report.Format = ReportFormat.html;
                 if (paginationParameter != null) paginationParameter.BoolValue = false;
                 Report.Status = ReportStatus.RenderingResult;
+                Report.ExecutionViewResultFormat = ReportFormat.html.ToString();
+                executeTasks(ExecutionStep.BeforeRendering);
                 string result = Render();
                 File.WriteAllText(newPath, result.Trim(), Encoding.UTF8);
             }
             finally
             {
+                Report.ExecutionViewResultFormat = "";
                 Report.Format = originalFormat;
                 if (paginationParameter != null) paginationParameter.BoolValue = initialValue;
                 Report.Status = ReportStatus.Executed;
@@ -1780,11 +1950,14 @@ namespace Seal.Model
             {
                 Report.Format = ReportFormat.csv;
                 Report.Status = ReportStatus.RenderingResult;
+                Report.ExecutionViewResultFormat = ReportFormat.csv.ToString();
+                executeTasks(ExecutionStep.BeforeRendering);
                 string result = Report.ExecutionView.ParseChildren();
                 File.WriteAllText(newPath, result.Trim(), Report.ResultFileEncoding);
             }
             finally
             {
+                Report.ExecutionViewResultFormat = "";
                 Report.Format = originalFormat;
                 Report.Status = ReportStatus.Executed;
                 Debug.WriteLine(string.Format("GenerateCSVResult {0} {1}", Report.Status, Report.ExecutionGUID));
@@ -1802,11 +1975,14 @@ namespace Seal.Model
             {
                 Report.Format = ReportFormat.print;
                 Report.Status = ReportStatus.RenderingResult;
+                Report.ExecutionViewResultFormat = ReportFormat.print.ToString();
+                executeTasks(ExecutionStep.BeforeRendering);
                 string result = Render();
                 File.WriteAllText(newPath, result.Trim(), Encoding.UTF8);
             }
             finally
             {
+                Report.ExecutionViewResultFormat = "";
                 Report.Format = originalFormat;
                 Report.Status = ReportStatus.Executed;
                 Debug.WriteLine(string.Format("GeneratePrintResult {0} {1}", Report.Status, Report.ExecutionGUID));
@@ -1819,6 +1995,8 @@ namespace Seal.Model
             string newPath = "";
             var originalFormat = Report.Format;
             Report.PdfConversion = true;
+            Report.ExecutionViewResultFormat = ReportFormat.pdf.ToString();
+            executeTasks(ExecutionStep.BeforeRendering);
             try
             {
                 string source = GeneratePrintResult();
@@ -1827,6 +2005,7 @@ namespace Seal.Model
             }
             finally
             {
+                Report.ExecutionViewResultFormat = "";
                 Report.PdfConversion = false;
                 Report.Format = originalFormat;
             }
@@ -1835,13 +2014,78 @@ namespace Seal.Model
 
         public string GenerateExcelResult()
         {
-            string path = FileHelper.GetUniqueFileName(Path.Combine(Report.GenerationFolder, Path.GetFileNameWithoutExtension(Report.ResultFileName)) + ".xlsx");
-            return Report.ExecutionView.ConvertToExcel(path);
-        }
+            var result = "";
+            try
+            {
+                Report.ExecutionViewResultFormat = ReportFormat.excel.ToString();
+                executeTasks(ExecutionStep.BeforeRendering);
+                string path = FileHelper.GetUniqueFileName(Path.Combine(Report.GenerationFolder, Path.GetFileNameWithoutExtension(Report.ResultFileName)) + ".xlsx");
+                result = Report.ExecutionView.ConvertToExcel(path);
 
+            }
+            finally
+            {
+                Report.ExecutionViewResultFormat = "";
+            }
+            return result;
+        }
 
         public bool IsConvertingToPDF = false; //If true, do not run conversion again
         public bool IsConvertingToExcel = false; //If true, do not run the report again as we are using the result tables...
 
+        //Dynamic Enums 
+        public Dictionary<MetaEnum, string> CurrentEnumValues = new Dictionary<MetaEnum, string>();
+
+        public void UpdateEnumValues(string enumId, string values)
+        {
+            var restriction = Report.ExecutionCommonRestrictions.FirstOrDefault(i => i.OptionValueHtmlId == enumId);
+            if (restriction != null && restriction.EnumRE != null)
+            {
+                if (!CurrentEnumValues.ContainsKey(restriction.EnumRE)) CurrentEnumValues.Add(restriction.EnumRE, null);
+                //Build the SQL value
+                restriction.EnumValues.Clear();
+                foreach (var v in values.Split(',').Where(i => !string.IsNullOrEmpty(i)))
+                {
+                    foreach (var ev in restriction.EnumRE.Values)
+                    {
+                        if (restriction.OptionHtmlId + ev.HtmlId == v) restriction.EnumValues.Add(ev.Id);
+                    }
+                }
+                CurrentEnumValues[restriction.EnumRE] = restriction.EnumSQLValue;
+            }
+        }
+
+        public string GetEnumValues(string enumId, string filter)
+        {
+            var restriction = Report.ExecutionCommonRestrictions.FirstOrDefault(i => i.OptionValueHtmlId == enumId);
+            var result = new StringBuilder();
+            if (restriction != null && restriction.EnumRE != null)
+            {
+                //Set current restrictions
+                foreach (var r in Report.ExecutionCommonRestrictions.Where(i => i.EnumRE != null))
+                {
+                    if (!CurrentEnumValues.ContainsKey(r.EnumRE)) CurrentEnumValues.Add(r.EnumRE, null);
+                    CurrentEnumValues[r.EnumRE] = r.EnumSQLValue;
+                }
+
+                var values = new List<MetaEV>();
+                if ((restriction.EnumRE.HasFilters && filter.Length >= restriction.EnumRE.FilterChars) || (restriction.EnumRE.HasDependencies && CurrentEnumValues.Count > 0))
+                {
+                    values = restriction.EnumRE.GetSubSetValues(filter, CurrentEnumValues);
+                }
+
+                foreach (var enumDef in restriction.EnumRE.Values)
+                {
+                    if (values.Exists(i => i.Id == enumDef.Id))
+                    {
+                        var display = restriction.GetEnumDisplayValue(enumDef.Id);
+                        result.Append(result.Length == 0 ? "[" : ",");
+                        result.AppendFormat("{{\"v\":\"{0}\",\"t\":\"{1}\"}}", restriction.OptionHtmlId + enumDef.HtmlId, display.Replace("\"", "\\\""));
+                    }
+                }
+                result.Append(result.Length == 0 ? "[]" : "]");
+            }
+            return result.ToString();
+        }
     }
 }

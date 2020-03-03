@@ -1,10 +1,10 @@
-﻿using System;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Seal.Model;
 using System.Diagnostics;
-using System.Data.OleDb;
-using System.Data;
-using System.Collections.Generic;
 using System.Linq;
 
 namespace Test
@@ -57,6 +57,7 @@ namespace Test
             //Add a restriction to the model
             var restriction = ReportRestriction.CreateReportRestriction();
             restriction.Source = report.Models[0].Source;
+            restriction.Report = report;
             restriction.Model = report.Models[0];
             restriction.MetaColumnGUID = table.Columns.FirstOrDefault(i => i.Name == "products.ProductName").GUID;
             restriction.SetDefaults();

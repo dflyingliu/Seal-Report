@@ -1,17 +1,15 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.ComponentModel;
 using Seal.Model;
-using Seal.Helpers;
 using System.Globalization;
 
-namespace Seal.Converter
+namespace Seal.Forms
 {
     internal class MetaEnumConverter : StringConverter
     {
@@ -28,13 +26,25 @@ namespace Seal.Converter
         {
             List<string> choices = new List<string>();
             choices.Add("");
+
             MetaColumn column = context.Instance as MetaColumn;
-            if (column != null)
+            if (column != null && column.Source != null)
             {
                 choices.AddRange(from s in column.Source.MetaData.Enums select s.Name);
             }
+            else
+            {
+                var element = context.Instance as ReportElement;
+                if (element != null && element.Report != null)
+                {
+                    foreach (var source in element.Report.Sources)
+                    {
+                        choices.AddRange(from s in source.MetaData.Enums select s.Name);
+                    }
+                }
+            }
 
-            return new StandardValuesCollection(choices);
+            return new StandardValuesCollection(choices.OrderBy(i => i).ToList());
         }
 
         public override bool CanConvertTo(ITypeDescriptorContext context, Type destType)
@@ -47,12 +57,27 @@ namespace Seal.Converter
             if (context != null)
             {
                 MetaColumn column = context.Instance as MetaColumn;
-                if (column != null)
+                if (column != null && column.Source != null)
                 {
                     if (value != null)
                     {
                         MetaEnum enumItem = column.Source.MetaData.Enums.FirstOrDefault(i => i.GUID == value.ToString());
                         if (enumItem != null) return enumItem.Name;
+                    }
+                }
+                else
+                {
+                    var element = context.Instance as ReportElement;
+                    if (element != null && element.Report != null)
+                    {
+                        if (value != null)
+                        {
+                            foreach (var source in element.Report.Sources)
+                            {
+                                MetaEnum enumItem = source.MetaData.Enums.FirstOrDefault(i => i.GUID == value.ToString());
+                                if (enumItem != null) return enumItem.Name;
+                            }
+                        }
                     }
                 }
             }
@@ -68,11 +93,26 @@ namespace Seal.Converter
         public override object ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value)
         {
             MetaColumn column = context.Instance as MetaColumn;
-            if (column != null)
+            if (column != null && column.Source != null)
             {
                 MetaEnum enumItem = column.Source.MetaData.Enums.FirstOrDefault(i => i.Name == value.ToString());
                 if (enumItem != null) return enumItem.GUID;
 
+            }
+            else
+            {
+                var element = context.Instance as ReportElement;
+                if (element != null && element.Report != null)
+                {
+                    if (value != null)
+                    {
+                        foreach (var source in element.Report.Sources)
+                        {
+                            MetaEnum enumItem = source.MetaData.Enums.FirstOrDefault(i => i.Name == value.ToString());
+                            if (enumItem != null) return enumItem.GUID;
+                        }
+                    }
+                }
             }
             return base.ConvertFrom(context, culture, value);
         }

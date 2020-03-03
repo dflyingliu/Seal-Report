@@ -19,24 +19,27 @@ var SWIUtil;
     }
     SWIUtil.Newguid = Newguid;
     function GetReportName(path) {
-        return path.split('\\').pop().replace(".srex", "");
+        return path.split(dirSeparator).pop().replace(".srex", "");
     }
     SWIUtil.GetReportName = GetReportName;
     function GetDirectoryName(path) {
-        return path.substring(0, path.lastIndexOf("\\"));
+        return path.substring(0, path.lastIndexOf(dirSeparator));
     }
     SWIUtil.GetDirectoryName = GetDirectoryName;
     function ShowMessage(alertClass, message, timeout) {
-        $waitDialog.modal('hide');
-        SWIUtil.HideMessages();
-        var $alert = $("<div class='alert' style='position:absolute; width:100%;z-index: 2000;margin-bottom:0;'><a href='#' class='close' data-dismiss='alert' aria-label='close'>&times;</a><p>" + message + "</p></div>");
-        $alert.css("top", ($(window).height() - 54).toString() + "px");
-        $alert.addClass(alertClass);
-        $("body").append($alert);
-        if (timeout == 0)
-            timeout = 15000;
-        if (timeout > 0)
-            setTimeout(function () { $alert.alert('close'); }, timeout);
+        setTimeout(function () {
+            $waitDialog.modal('hide');
+            SWIUtil.HideMessages();
+            var $alert = $("<div class='alert' style='position:absolute; width:80%; z-index: 2000;margin-bottom:0;'><a href='#' class='close' data-dismiss='alert' aria-label='close'>&times;</a><p>" + message + "</p></div>");
+            $alert.css("top", ($(window).height() - 54).toString() + "px");
+            $alert.css("left", ($(window).width() / 10).toString() + "px");
+            $alert.addClass(alertClass);
+            $("body").append($alert);
+            if (timeout == 0)
+                timeout = 15000;
+            if (timeout > 0)
+                setTimeout(function () { $alert.alert('close'); }, timeout);
+        }, 500);
     }
     SWIUtil.ShowMessage = ShowMessage;
     function HideMessages() {
@@ -44,10 +47,18 @@ var SWIUtil;
     }
     SWIUtil.HideMessages = HideMessages;
     function EnableButton(button, enabled) {
-        if (!enabled)
-            button.prop('disabled', 'true').addClass("disabled");
-        else
-            button.removeProp('disabled').removeClass("disabled");
+        if (button.length > 0 && button[0].type === "button") {
+            if (!enabled)
+                button.removeClass("active").addClass("disabled");
+            else
+                button.addClass("active").removeClass("disabled");
+        }
+        else {
+            if (!enabled)
+                button.prop('disabled', 'true').addClass("disabled");
+            else
+                button.removeProp('disabled').removeClass("disabled");
+        }
     }
     SWIUtil.EnableButton = EnableButton;
     function EnableLinkInput(link, enabled) {
@@ -146,5 +157,14 @@ var SWIUtil;
         return SWIUtil.FindBootstrapEnvironment() == "xs";
     }
     SWIUtil.IsMobile = IsMobile;
+    function InitNumericInput() {
+        $(".numeric_input").keyup(function () {
+            var v = this.value;
+            if (!$.isNumeric(v)) {
+                this.value = this.value.slice(0, -1);
+            }
+        });
+    }
+    SWIUtil.InitNumericInput = InitNumericInput;
 })(SWIUtil || (SWIUtil = {}));
 //# sourceMappingURL=swi-utils.js.map

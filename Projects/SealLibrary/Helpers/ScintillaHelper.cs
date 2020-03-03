@@ -1,10 +1,10 @@
-﻿using ScintillaNET;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
+using ScintillaNET;
 using System;
-using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using ScintillaNET_FindReplaceDialog;
 using System.Windows.Forms;
 
@@ -32,7 +32,7 @@ namespace Seal.Helpers
             if (showLineNumber)
             {
                 // Show line numbers
-                scintilla.Margins[0].Width = 20;
+                scintilla.Margins[0].Width = 25;
                 scintilla.Styles[Style.LineNumber].ForeColor = Color.FromArgb(255, 128, 128, 128);  //Dark Gray
                 scintilla.Styles[Style.LineNumber].BackColor = Color.FromArgb(255, 228, 228, 228);  //Light Gray
             }

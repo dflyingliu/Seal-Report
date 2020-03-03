@@ -1,48 +1,100 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using Seal.Converter;
 using Seal.Helpers;
 using System.Web;
 using System.Globalization;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// A ResultCell defines a cell generated in a table after the execution of a report model
+    /// </summary>
     public class ResultCell
     {
+        /// <summary>
+        /// The object value of the cell
+        /// </summary>
         public object Value;
+
+        /// <summary>
+        /// The ReportElement of the element model
+        /// </summary>
         public ReportElement Element;
+
+        /// <summary>
+        /// True if the cell is for a total
+        /// </summary>
         public bool IsTotal = false;
+
+        /// <summary>
+        /// True if the cell is for a title
+        /// </summary>
         public bool IsTitle = false;
+
+        /// <summary>
+        /// True if the cell is for a sub total
+        /// </summary>
         public bool IsSubTotal = false;
+
+        /// <summary>
+        /// True if the cell is for the total of totals
+        /// </summary>
         public bool IsTotalTotal = false;
+
+        /// <summary>
+        /// True if the cell is for a serie
+        /// </summary>
         public bool IsSerie = false;
 
         //Final Values and CSS, Class if set in the cell script
+
+        /// <summary>
+        /// If not empty, the value is used for the cell
+        /// </summary>
         public string FinalValue = "";
+
+        /// <summary>
+        /// If not empty, the css style is used for the cell
+        /// </summary>
         public string FinalCssStyle = "";
+
+        /// <summary>
+        /// If not empty, the css class is used for the cell
+        /// </summary>
         public string FinalCssClass = "";
 
+        /// <summary>
+        /// Custom Tag the can be used at execution time to store any object
+        /// </summary>
+        public object Tag;
+
+        /// <summary>
+        /// HTML value of the cell
+        /// </summary>
         public string HTMLValue
         {
             get
             {
-                if (!string.IsNullOrEmpty(FinalValue)) return FinalValue;
-                return DisplayValue;
+                return !string.IsNullOrEmpty(FinalValue) ? FinalValue : DisplayValue.Replace("\r","").Replace("\n","<br>");
             }
         }
 
+        /// <summary>
+        /// CSV value of the cell
+        /// </summary>
         public string CSVValue(bool useFormat, string separator)
         {
-            string result = ExcelHelper.ToCsv(useFormat ? DisplayValue : RawDisplayValue, separator);
-            return result;
+            return ExcelHelper.ToCsv(useFormat ? DisplayValue : RawDisplayValue, separator);
         }
 
+        /// <summary>
+        /// Display value of the cell
+        /// </summary>
         public string DisplayValue
         {
             get
@@ -59,7 +111,9 @@ namespace Seal.Model
             }
         }
 
-
+        /// <summary>
+        /// Display value of the cell without applying the format or translation
+        /// </summary>
         public string RawDisplayValue
         {
             get
@@ -70,6 +124,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Deprecated: Kept for compatibility
+        /// </summary>
         public string ValueNoHTML //Kept for compatibility
         {
             get
@@ -77,6 +134,10 @@ namespace Seal.Model
                 return DisplayValue;
             }
         }
+
+        /// <summary>
+        /// Double value of the cell if possible
+        /// </summary>
         public double? DoubleValue
         {
             get
@@ -88,6 +149,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Value used for navigation
+        /// </summary>
         public string NavigationValue
         {
             get
@@ -108,8 +172,14 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Values used for sub report navigation
+        /// </summary>
         public List<ResultCell> SubReportValues = new List<ResultCell>();
 
+        /// <summary>
+        /// Date time value of the cell if possible
+        /// </summary>
         public DateTime? DateTimeValue
         {
             get
@@ -119,6 +189,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Css cell class
+        /// </summary>
         public string CellCssClass
         {
             get
@@ -140,6 +213,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Css cell style
+        /// </summary>
         public string CellCssStyle
         {
             get
@@ -155,24 +231,48 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Retruns true if at least a Sort is specified
+        /// </summary>
+        public static bool ShouldSort(List<ResultCell[]> values)
+        {
+            if (values.Count > 0) return ShouldSort(values[0]);
+            return false;
+        }
+
+        /// <summary>
+        /// Retruns true if at least a Sort is specified
+        /// </summary>
+        public static bool ShouldSort(ResultCell[] values)
+        {
+            if (values != null) return values.FirstOrDefault(i => i.Element.FinalSortOrder != null) != null;
+            return false;
+        }
+
+        /// <summary>
+        /// Compares 2 cells arrays
+        /// </summary>
         public static int CompareCells(ResultCell[] a, ResultCell[] b)
         {
             if (a.Length == 0 || a.Length != b.Length) return 0;
             ReportModel model = a[0].Element.Model;
 
-            foreach (ReportElement element in model.Elements.Where(i=>!string.IsNullOrEmpty(i.FinalSortOrder)).OrderBy(i => i.FinalSortOrder))
+            foreach (ReportElement element in model.Elements.Where(i => !string.IsNullOrEmpty(i.FinalSortOrder)).OrderBy(i => i.FinalSortOrder))
             {
                 ResultCell aCell = a.FirstOrDefault(i => i.Element == element);
                 ResultCell bCell = b.FirstOrDefault(i => i.Element == element);
                 if (aCell != null && bCell != null)
                 {
                     int result = CompareCell(aCell, bCell);
-                    if (result != 0) return (element.FinalSortOrder.Contains(SortOrderConverter.kAscendantSortKeyword) ? 1 : -1) * result;
+                    if (result != 0) return (element.FinalSortOrder.Contains(ReportElement.kAscendantSortKeyword) ? 1 : -1) * result;
                 }
             }
             return 0;
         }
 
+        /// <summary>
+        /// Compares 2 cells arrays
+        /// </summary>
         public static int CompareCellsForTableLoad(ResultCell[] a, ResultCell[] b)
         {
             if (a.Length == 0 || a.Length != b.Length) return 0;
@@ -192,13 +292,16 @@ namespace Seal.Model
                     ResultCell aCell = a[sortIndex];
                     ResultCell bCell = b[sortIndex];
                     int result = CompareCell(aCell, bCell);
-                    if (result != 0) return (element.FinalSortOrder.Contains(SortOrderConverter.kAscendantSortKeyword) ? 1 : -1) * result;
+                    if (result != 0) return (element.FinalSortOrder.Contains(ReportElement.kAscendantSortKeyword) ? 1 : -1) * result;
                 }
             }
             return 0;
         }
 
 
+        /// <summary>
+        /// Compares 2 cells
+        /// </summary>
         public static int CompareCell(ResultCell a, ResultCell b)
         {
             if (a.Value == DBNull.Value && b.Value == DBNull.Value) return 0;
@@ -231,6 +334,9 @@ namespace Seal.Model
         }
 
         List<NavigationLink> _links = null;
+        /// <summary>
+        /// List of NavigationLink for the cell
+        /// </summary>
         public List<NavigationLink> Links
         {
             get
@@ -261,6 +367,7 @@ namespace Seal.Model
                                 if (child != null)
                                 {
                                     NavigationLink link = new NavigationLink();
+                                    link.Type = NavigationType.Drill;
                                     link.Href = string.Format("exe={0}&src={1}&dst={2}&val={3}", report.ExecutionGUID, Element.MetaColumnGUID, childGUID, HttpUtility.UrlEncode(NavigationValue));
                                     link.Text = HttpUtility.HtmlEncode(report.Translate("Drill >") + " " + report.Repository.RepositoryTranslate("Element", child.Category + '.' + child.DisplayName, child.DisplayName));
 
@@ -269,10 +376,9 @@ namespace Seal.Model
                             }
 
                             //Get drill parent link
-                            //Element.MetaColumn.DillUpOnlyIfDD
                             foreach (MetaTable table in Element.Source.MetaData.Tables)
                             {
-                                foreach(MetaColumn parentColumn in table.Columns.Where(i => i.DrillChildren.Contains(Element.MetaColumnGUID)))
+                                foreach (MetaColumn parentColumn in table.Columns.Where(i => i.DrillChildren.Contains(Element.MetaColumnGUID)))
                                 {
                                     //Check that the element is not already in the model
                                     if (Element.Model.Elements.Exists(i => i.MetaColumnGUID == parentColumn.GUID && i.PivotPosition == Element.PivotPosition)) continue;
@@ -284,6 +390,7 @@ namespace Seal.Model
                                     }
 
                                     NavigationLink link = new NavigationLink();
+                                    link.Type = NavigationType.Drill;
                                     link.Href = string.Format("exe={0}&src={1}&dst={2}", report.ExecutionGUID, Element.MetaColumnGUID, parentColumn.GUID);
                                     link.Text = HttpUtility.HtmlEncode(report.Translate("Drill <") + " " + report.Repository.RepositoryTranslate("Element", parentColumn.Category + '.' + parentColumn.DisplayName, parentColumn.DisplayName));
                                     _links.Add(link);
@@ -301,7 +408,7 @@ namespace Seal.Model
                                 foreach (var guid in subreport.Restrictions)
                                 {
                                     var cellValue = SubReportValues.FirstOrDefault(i => i.Element.MetaColumnGUID == guid);
-                                    if (cellValue != null)
+                                    if (cellValue != null && !string.IsNullOrEmpty(cellValue.NavigationValue))
                                     {
                                         subReportRestrictions += string.Format("&res{0}={1}&val{0}={2}", index, guid, HttpUtility.UrlEncode(cellValue.NavigationValue));
                                         index++;
@@ -310,6 +417,7 @@ namespace Seal.Model
                                 if (!string.IsNullOrEmpty(subReportRestrictions))
                                 {
                                     NavigationLink link = new NavigationLink();
+                                    link.Type = NavigationType.SubReport;
                                     link.Href = string.Format("rpa={0}", HttpUtility.UrlEncode(subreport.Path));
                                     if (subreport.Restrictions.Count > 1 || !subreport.Restrictions.Contains(Element.MetaColumn.GUID))
                                     {
@@ -328,24 +436,66 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Add a navigation link from this cell to download a file. The file will be loaded in the Navigation Script of the model.
+        /// </summary>
+        public void AddNavigationFileDownload(string text, string linkTag = "")
+        {
+            var guid = Guid.NewGuid().ToString();
+            var link = new NavigationLink() { Type = NavigationType.FileDownload, Href = guid, Text = text, Cell = this, Report = Element != null ? Element.Report : null, Tag = linkTag };
+            Links.Add(link);
+            ContextModel.Report.NavigationLinks.Add(guid, link);
+        }
+
+        /// <summary>
+        /// Add a navigation link from this cell to open a new page on a web site
+        /// </summary>
+        public void AddNavigationHyperLink(string href, string text)
+        {
+            Links.Add(new NavigationLink() { Type = NavigationType.Hyperlink, Href = href, Text = text });
+        }
 
         //Context to be used for cell script...
+        /// <summary>
+        /// For cell script execution: current ReportModel
+        /// </summary>
         public ReportModel ContextModel;
+        /// <summary>
+        /// For cell script execution: current ResultPage
+        /// </summary>
         public ResultPage ContextPage;
+        /// <summary>
+        /// For cell script execution: current ResultTable
+        /// </summary>
         public ResultTable ContextTable;
+        /// <summary>
+        /// For cell script execution: current ResultTable
+        /// </summary>
         public int ContextRow = -1;
+        /// <summary>
+        /// For cell script execution: current ResultTable
+        /// </summary>
         public int ContextCol = -1;
 
+        /// <summary>
+        /// For cell script execution: current line of the table (array of cell)
+        /// </summary>
         public ResultCell[] ContextCurrentLine
         {
             get { return ContextTable != null && ContextRow != -1 ? ContextTable.Lines[ContextRow] : null; }
         }
 
+        /// <summary>
+        /// For cell script execution: true if the cell is in a page table
+        /// </summary>
         public bool ContextIsPageTable
         {
             get { return ContextPage != null && ContextTable != null && ContextPage.PageTable == ContextTable; }
         }
 
+        /// <summary>
+        /// For cell script execution: true if the cell is in a summary table
+        /// </summary>
         public bool ContextIsSummaryTable
         {
             get { return ContextPage == null; }

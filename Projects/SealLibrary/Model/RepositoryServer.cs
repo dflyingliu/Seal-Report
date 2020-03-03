@@ -1,31 +1,48 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.IO;
-using Seal.Helpers;
-using RazorEngine;
-using System.Xml.Serialization;
-using System.Globalization;
 using System.Data;
-using System.Text.RegularExpressions;
-using System.Diagnostics;
-using System.Windows.Forms;
-using System.Reflection;
-using System.Drawing;
+using Seal.Helpers;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// The RepositoryServer is used to maintain a static list of ReportViewTemplate for performances purpose
+    /// </summary>
     public class RepositoryServer
     {
         private static List<ReportViewTemplate> _viewTemplates = null;
-        private static Object _viewLock = new object();
+        private static object _viewLock = new object();
 
-        //View templates
+        public static void PreLoadTemplates()
+        {
+            lock (_viewLock)
+            {
+                var templates = ViewTemplates;
+                foreach (var template in templates)
+                {
+                    if (!template.IsParsed) template.ParseConfiguration();
+                    RazorHelper.Compile(template.Text, typeof(Report), template.CompilationKey);
+
+                    //Create a view to compile partial templates
+                    ReportView view = ReportView.Create(template);
+                    view.InitPartialTemplates();
+                    foreach (var partialTemplate in view.PartialTemplates)
+                    {
+                        view.GetPartialTemplateKey(partialTemplate.Name, view);
+                    }
+
+                }
+            }
+        }
+
+        /// <summary>
+        /// Current list of ReportViewTemplate
+        /// </summary>
         public static List<ReportViewTemplate> ViewTemplates
         {
             get
@@ -40,6 +57,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Returns a ReportViewTemplate from a given name
+        /// </summary>
         public static ReportViewTemplate GetViewTemplate(string name)
         {
             lock (_viewLock)
@@ -69,6 +89,7 @@ namespace Seal.Model
             result = _viewTemplates.FirstOrDefault(i => i.Name == name);
             if (result == null)
             {
+                System.Diagnostics.Debug.WriteLine("!! Loading all the templates !!");
 
                 lock (_viewLock)
                 {

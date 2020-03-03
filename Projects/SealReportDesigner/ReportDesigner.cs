@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -57,6 +57,7 @@ namespace Seal
         ModelPanel modelPanel = new ModelPanel();
         Repository _repository;
         ReportViewerForm _reportViewer = null;
+        ToolStripMenuItem nextWidgetMenuItem = new ToolStripMenuItem() { Text = "Go to next Widget in the report", ToolTipText = "select the next view having a published Widget", AutoToolTip = true, ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.W))), ShowShortcutKeys = true };
 
         public ReportDesigner()
         {
@@ -79,8 +80,10 @@ namespace Seal
             toolsHelper = new ToolsHelper() { EntityHandler = this };
             toolsHelper.InitHelpers(toolsToolStripMenuItem, true);
 
-            HelperEditor.HandlerInterface = this;
+            toolsToolStripMenuItem.DropDownItems.Insert(4, nextWidgetMenuItem);
+            nextWidgetMenuItem.Click += nextWidget_Click;
 
+            HelperEditor.HandlerInterface = this;
 
             mainSplitContainer.Panel2.Controls.Add(modelPanel);
             modelPanel.Dock = DockStyle.Fill;
@@ -157,6 +160,11 @@ namespace Seal
             }
         }
 
+        public void RefreshModelTreeView()
+        {
+            modelPanel.ReinitSource();
+        }
+
         #endregion
 
         #region Helpers
@@ -177,6 +185,13 @@ namespace Seal
             }
         }
 
+        private TreeNode _reportTN;
+        private TreeNode _sourceTN;
+        private TreeNode _viewTN;
+        private TreeNode _tasksTN;
+        private TreeNode _outputsTN;
+        private TreeNode _schedulesTN;
+
         void init(object entityToSelect = null)
         {
             if (entityToSelect == null && mainTreeView.SelectedNode != null) entityToSelect = mainTreeView.SelectedNode.Tag;
@@ -191,66 +206,70 @@ namespace Seal
                 mainSplitContainer.Visible = true;
 
                 mainTreeView.Nodes.Clear();
-                TreeNode sourceTN = new TreeNode("Sources") { Tag = new SourceFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
-                mainTreeView.Nodes.Add(sourceTN);
+
+                _reportTN = new TreeNode("General") { Tag = Report, ImageIndex = 16, SelectedImageIndex = 16 };
+                mainTreeView.Nodes.Add(_reportTN);
+
+                _sourceTN = new TreeNode("Sources") { Tag = new SourceFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
+                mainTreeView.Nodes.Add(_sourceTN);
                 foreach (var source in _report.Sources)
                 {
-                    treeViewHelper.addSource(sourceTN.Nodes, source, 13);
+                    treeViewHelper.addSource(_sourceTN.Nodes, source, 13);
                 }
-                sourceTN.Expand();
+                _sourceTN.Expand();
 
                 TreeNode modelTN = new TreeNode("Models") { Tag = new ModelFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
                 mainTreeView.Nodes.Add(modelTN);
                 foreach (var model in _report.Models)
                 {
-                    TreeNode tn = new TreeNode(model.Name) { Tag = model, ImageIndex = 10, SelectedImageIndex = 10 };
+                    TreeNode tn = new TreeNode(model.Name) { Tag = model, ImageIndex = model.IsSQLModel ? 15 : 10, SelectedImageIndex = model.IsSQLModel ? 15 : 10 };
                     tn.Tag = model;
                     modelTN.Nodes.Add(tn);
                 }
                 modelTN.Expand();
 
-                TreeNode viewTN = new TreeNode("Views") { Tag = new ViewFolder() { Report = Report }, ImageIndex = 8, SelectedImageIndex = 8 };
-                mainTreeView.Nodes.Add(viewTN);
+                _viewTN = new TreeNode("Views") { Tag = new ViewFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
+                mainTreeView.Nodes.Add(_viewTN);
                 foreach (ReportView view in _report.Views)
                 {
                     TreeNode reportViewTN = new TreeNode(view.Name) { ImageIndex = 8, SelectedImageIndex = 8 };
                     reportViewTN.Tag = view;
-                    viewTN.Nodes.Add(reportViewTN);
+                    _viewTN.Nodes.Add(reportViewTN);
                     initTreeNodeViews(reportViewTN, view);
                 }
-                viewTN.ExpandAll();
+                _viewTN.ExpandAll();
 
-                TreeNode tasksTN = new TreeNode("Tasks") { Tag = new TasksFolder() { Report = Report }, ImageIndex = 2, SelectedImageIndex = 2 };
-                mainTreeView.Nodes.Add(tasksTN);
+                _tasksTN = new TreeNode("Tasks") { Tag = new TasksFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
+                mainTreeView.Nodes.Add(_tasksTN);
                 foreach (var task in _report.Tasks)
                 {
                     var imageIndex = task.Enabled ? 12 : 14;
                     TreeNode taskTN = new TreeNode(task.Name) { Tag = task, ImageIndex = imageIndex, SelectedImageIndex = imageIndex };
-                    tasksTN.Nodes.Add(taskTN);
+                    _tasksTN.Nodes.Add(taskTN);
                 }
-                tasksTN.Expand();
+                _tasksTN.Expand();
 
-                TreeNode outputsTN = new TreeNode("Outputs") { Tag = new OutputFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
-                mainTreeView.Nodes.Add(outputsTN);
+                _outputsTN = new TreeNode("Outputs") { Tag = new OutputFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
+                mainTreeView.Nodes.Add(_outputsTN);
                 foreach (var output in _report.Outputs)
                 {
                     TreeNode outputTN = new TreeNode(output.Name) { Tag = output, ImageIndex = 9, SelectedImageIndex = 9 };
-                    outputsTN.Nodes.Add(outputTN);
+                    _outputsTN.Nodes.Add(outputTN);
                 }
-                outputsTN.Expand();
+                _outputsTN.Expand();
 
-                TreeNode schedulesTN = new TreeNode("Schedules") { Tag = new ScheduleFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
-                mainTreeView.Nodes.Add(schedulesTN);
+                _schedulesTN = new TreeNode("Schedules") { Tag = new ScheduleFolder(), ImageIndex = 2, SelectedImageIndex = 2 };
+                mainTreeView.Nodes.Add(_schedulesTN);
                 foreach (var schedule in _report.Schedules)
                 {
                     TreeNode scheduleTN = new TreeNode(schedule.Name) { Tag = schedule, ImageIndex = 11, SelectedImageIndex = 11 };
-                    schedulesTN.Nodes.Add(scheduleTN);
+                    _schedulesTN.Nodes.Add(scheduleTN);
                 }
-                schedulesTN.Expand();
+                _schedulesTN.Expand();
 
                 if (mainTreeView.SelectedNode == null)
                 {
-                    mainTreeView.SelectedNode = sourceTN;
+                    mainTreeView.SelectedNode = _sourceTN;
                 }
             }
             if (entityToSelect != null) selectNode(entityToSelect);
@@ -278,6 +297,7 @@ namespace Seal
             executeToolStripButton.Enabled = executeToolStripMenuItem.Enabled;
             renderToolStripMenuItem.Enabled = (_canRender && _report != null && _reportViewer != null && _reportViewer.Visible && _reportViewer.CanRender);
             renderToolStripButton.Enabled = renderToolStripMenuItem.Enabled;
+            nextWidgetMenuItem.Enabled = (_report != null);
 
             bool showViewOutput = (selectedEntity is ReportView || selectedEntity is ReportOutput);
             executeViewOutputToolStripMenuItem.Visible = showViewOutput;
@@ -500,8 +520,7 @@ namespace Seal
                         if (sender == saveAsToolStripMenuItem)
                         {
                             //Save as -> new GUID and no schedule copy...
-                            _report.GUID = Guid.NewGuid().ToString();
-                            _report.Schedules.Clear();
+                            _report.InitGUIDAndSchedules();
                         }
                         _report.FilePath = dlg.FileName;
                         init();
@@ -606,7 +625,7 @@ namespace Seal
         }
 
 
-        bool _pdfExpanded = false, _excelExpanded = false, _configurationExpanded = true;
+        bool _pdfExpanded = false, _excelExpanded = false, _configurationExpanded = true, _widgetExpanded = false;
         private void mainTreeView_AfterSelect(object sender, TreeViewEventArgs e)
         {
             modelPanel.Visible = false;
@@ -624,6 +643,8 @@ namespace Seal
             if (entry != null) _excelExpanded = entry.Expanded;
             entry = Helper.GetGridEntry(mainPropertyGrid, "template configuration");
             if (entry != null) _configurationExpanded = entry.Expanded;
+            entry = Helper.GetGridEntry(mainPropertyGrid, "widget definition");
+            if (entry != null) _widgetExpanded = entry.Expanded;
 
             mainPropertyGrid.SelectedObject = null;
             if (selectedEntity is ReportModel)
@@ -631,6 +652,13 @@ namespace Seal
                 modelPanel.Visible = true;
                 modelPanel.Model = (ReportModel)selectedEntity;
                 modelPanel.Init(this);
+            }
+            else if (selectedEntity is Report)
+            {
+                Report entity = (Report)selectedEntity;
+                mainPropertyGrid.Visible = true;
+                entity.InitEditor();
+                mainPropertyGrid.SelectedObject = selectedEntity;
             }
             else if (selectedEntity is RootComponent)
             {
@@ -644,8 +672,6 @@ namespace Seal
                 if (selectedEntity is MetaJoin && !((MetaJoin)selectedEntity).IsEditable) entity.SetReadOnly();
                 if (selectedEntity is MetaColumn && !((MetaColumn)selectedEntity).MetaTable.IsEditable) entity.SetReadOnly();
                 if (selectedEntity is MetaEnum && !((MetaEnum)selectedEntity).IsEditable) entity.SetReadOnly();
-
-                if (selectedEntity is MetaColumn) ((MetaColumn)selectedEntity).HideSubReports();
             }
             //Set default expanded
             entry = Helper.GetGridEntry(mainPropertyGrid, "pdf configuration");
@@ -654,6 +680,10 @@ namespace Seal
             if (entry != null) entry.Expanded = _excelExpanded;
             entry = Helper.GetGridEntry(mainPropertyGrid, "template configuration");
             if (entry != null) entry.Expanded = _configurationExpanded;
+            entry = Helper.GetGridEntry(mainPropertyGrid, "widget definition");
+            if (entry != null) entry.Expanded = _widgetExpanded;
+            entry = Helper.GetGridEntry(mainPropertyGrid, "custom partial template texts");
+            if (entry != null) entry.Expanded = true;
 
             toolStripHelper.SetHelperButtons(selectedEntity);
             enableControls();
@@ -736,12 +766,13 @@ namespace Seal
             removeToolStripMenuItem.Enabled = (selectSource.Count > 0);
         }
 
-        void addAddItem(string text, object tag)
+        void addAddItem(string text, object tag, string toolTip = "")
         {
             ToolStripMenuItem ts = new ToolStripMenuItem();
             ts.Click += new System.EventHandler(this.addToolStripMenuItem_Click);
             ts.Tag = tag;
             ts.Text = text;
+            if (!string.IsNullOrEmpty(toolTip)) ts.ToolTipText = toolTip;
             treeContextMenuStrip.Items.Add(ts);
         }
 
@@ -798,134 +829,170 @@ namespace Seal
 
         private void treeContextMenuStrip_Opening(object sender, CancelEventArgs e)
         {
-            object entity = mainTreeView.SelectedNode.Tag;
-            treeContextMenuStrip.Items.Clear();
-            if (entity is SourceFolder)
+            try
             {
-                addAddItem("Add Data Source", null);
-                addAddItem("Add No SQL Data Source", null);
-                foreach (var source in _repository.Sources)
+                Cursor.Current = Cursors.WaitCursor;
+
+                object entity = mainTreeView.SelectedNode.Tag;
+                treeContextMenuStrip.Items.Clear();
+                if (entity is SourceFolder)
                 {
-                    addAddItem(string.Format("Add {0} (Repository)", source.Name), source);
+                    addAddItem("Add Data Source", null);
+                    addAddItem("Add No SQL Data Source", null);
+                    foreach (var source in _repository.Sources)
+                    {
+                        addAddItem(string.Format("Add {0} (Repository)", source.Name), source);
+                    }
+                    addRemoveItem("Remove Data Sources...");
                 }
-                addRemoveItem("Remove Data Sources...");
-            }
-            else if (entity is ViewFolder)
-            {
-                if (RepositoryServer.ViewTemplates.Exists(i => i.Name == ReportViewTemplate.ModelName))
+                else if (entity is ViewFolder)
                 {
-                    addAddItem("Add a View", null);
+                    if (RepositoryServer.ViewTemplates.Exists(i => i.Name == ReportViewTemplate.ModelName))
+                    {
+                        addAddItem("Add a View", null);
+                    }
+                    addRemoveItem("Remove Views...");
                 }
-                addRemoveItem("Remove Views...");
-            }
-            else if (entity is ReportView)
-            {
-                var currentTemplateName = ((ReportView)entity).TemplateName;
-                foreach (var template in RepositoryServer.ViewTemplates.Where(i => i.ParentNames.Contains(currentTemplateName)))
+                else if (entity is ReportView)
                 {
-                    addAddItem("Add a " + template.Name + " View", template);
+                    var currentTemplateName = ((ReportView)entity).TemplateName;
+                    foreach (var template in RepositoryServer.ViewTemplates.Where(i => i.ParentNames.Contains(currentTemplateName)))
+                    {
+                        addAddItem("Add a " + template.Name + " View", template, template.Description);
+                    }
+                    addRemoveItem("Remove Views...");
+                    addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                    addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                    addSmartCopyItem("Smart copy...", entity);
+                    if (mainTreeView.SelectedNode.Parent.Tag is ViewFolder) addExecuteRenderContextItem(((RootComponent)entity).Name);
                 }
-                addRemoveItem("Remove Views...");
-                addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-                addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-                addSmartCopyItem("Smart copy...", entity);
-                if (mainTreeView.SelectedNode.Parent.Tag is ViewFolder) addExecuteRenderContextItem(((RootComponent)entity).Name);
-            }
-            else if (entity is TasksFolder)
-            {
-                addAddItem("Add a Task", null);
-                addRemoveItem("Remove Tasks...");
-                addSmartCopyItem("Smart copy...", entity);
-            }
-            else if (entity is OutputFolder)
-            {
-                foreach (var device in _repository.Devices)
+                else if (entity is TasksFolder)
                 {
-                    addAddItem("Add Output for " + device.FullName, device);
+                    addAddItem("Add a Task", null);
+                    addRemoveItem("Remove Tasks...");
                 }
-                addRemoveItem("Remove Outputs...");
-            }
-            else if (entity is ScheduleFolder)
-            {
-                foreach (var output in _report.Outputs.OrderBy(i => i.Name))
+                else if (entity is OutputFolder)
                 {
-                    addAddItem("Add Schedule for " + Helper.QuoteSingle(output.Name), output);
+                    foreach (var device in _repository.Devices)
+                    {
+                        addAddItem("Add Output for " + device.FullName, device);
+                    }
+                    addRemoveItem("Remove Outputs...");
                 }
-                if (_report.Tasks.Count > 0)
+                else if (entity is ScheduleFolder)
                 {
+                    foreach (var output in _report.Outputs.OrderBy(i => i.Name))
+                    {
+                        addAddItem("Add Schedule for " + Helper.QuoteSingle(output.Name), output);
+                    }
+                    if (_report.Tasks.Count > 0)
+                    {
+                        if (treeContextMenuStrip.Items.Count > 0) treeContextMenuStrip.Items.Add(new ToolStripSeparator());
+                        addAddItem("Add Schedule for the Report Tasks", null);
+                    }
+
+                    addRemoveItem("Remove Schedules...");
+                }
+                else if (entity is ModelFolder)
+                {
+                    addAddItem("Add a MetaData Model", 1);
+                    addAddItem("Add a SQL Model", 2);
+                    addRemoveItem("Remove Models...");
+                }
+                else if (entity is ReportModel)
+                {
+                    var reportModel = entity as ReportModel;
+                    addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                    addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                    addSmartCopyItem("Smart copy...", entity);
+
+                    ToolStripMenuItem ts = new ToolStripMenuItem();
+                    ts.Click += new System.EventHandler(convertModel);
+                    ts.Text = reportModel.IsSQLModel ? "Convert SQL Model to a MetaData Model" : "Convert MetaData Model to a SQL Model";
+                    if (!reportModel.IsSQLModel || (reportModel.IsSQLModel && !string.IsNullOrEmpty(reportModel.Table.Sql)))
+                    {
+                        if (treeContextMenuStrip.Items.Count > 0) treeContextMenuStrip.Items.Add(new ToolStripSeparator());
+                        treeContextMenuStrip.Items.Add(ts);
+                    }
+                }
+                else if (entity is ReportTask)
+                {
+                    addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                    addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                    addSmartCopyItem("Smart copy...", entity);
+                    if (((ReportTask)entity).Enabled) addExecuteRenderContextItem(((RootComponent)entity).Name, " (this task only)");
+                }
+                else if (entity is ReportOutput)
+                {
+                    addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                    addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                    addSmartCopyItem("Smart copy...", entity);
+                    addExecuteRenderContextItem(((RootComponent)entity).Name);
+                }
+                else if (entity is ReportSchedule)
+                {
+                    addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+                }
+                else if (entity is ReportSource)
+                {
+                    addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
+
                     if (treeContextMenuStrip.Items.Count > 0) treeContextMenuStrip.Items.Add(new ToolStripSeparator());
-                    addAddItem("Add Schedule for the Report Tasks", null);
+                    ToolStripMenuItem ts = new ToolStripMenuItem();
+                    ts.Click += new System.EventHandler(convertReportSourceAsRepositorySource);
+                    ts.Text = "Convert Report Source to a Repository Source...";
+                    ts.Enabled = (((ReportSource)entity).MetaSourceGUID == null);
+                    treeContextMenuStrip.Items.Add(ts);
+                    treeContextMenuStrip.Items.Add(new ToolStripSeparator());
+                    ts = new ToolStripMenuItem();
+                    ts.Click += new System.EventHandler(editMetaSource);
+                    ts.Text = "Edit the Repository Source with the Server Manager...";
+                    ts.Enabled = (((ReportSource)entity).MetaSourceGUID != null);
+                    treeContextMenuStrip.Items.Add(ts);
                 }
-
-                addRemoveItem("Remove Schedules...");
+                else
+                {
+                    treeViewHelper.treeContextMenuStrip_Opening(sender, e);
+                }
             }
-            else if (entity is ReportModel)
+            finally
             {
-                addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-                addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-                addSmartCopyItem("Smart copy...", entity);
-            }
-            else if (entity is ReportTask)
-            {
-                addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-                addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-                addSmartCopyItem("Smart copy...", entity);
-                if (((ReportTask)entity).Enabled) addExecuteRenderContextItem(((RootComponent)entity).Name, " (this task only)");
-            }
-            else if (entity is ReportOutput)
-            {
-                addCopyItem("Copy " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-                addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-                addSmartCopyItem("Smart copy...", entity);
-                addExecuteRenderContextItem(((RootComponent)entity).Name);
-            }
-            else if (entity is ReportSchedule)
-            {
-                addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-            }
-            else if (entity is ReportSource)
-            {
-                addRemoveRootItem("Remove " + Helper.QuoteSingle(((RootComponent)entity).Name), entity);
-
-                if (treeContextMenuStrip.Items.Count > 0) treeContextMenuStrip.Items.Add(new ToolStripSeparator());
-                ToolStripMenuItem ts = new ToolStripMenuItem();
-                ts.Click += new System.EventHandler(convertReportSourceAsRepositorySource);
-                ts.Text = "Convert Report Source to a Repository Source...";
-                ts.Enabled = (((ReportSource)entity).MetaSourceGUID == null);
-                treeContextMenuStrip.Items.Add(ts);
-                treeContextMenuStrip.Items.Add(new ToolStripSeparator());
-                ts = new ToolStripMenuItem();
-                ts.Click += new System.EventHandler(editMetaSource);
-                ts.Text = "Edit the Repository Source with the Server Manager...";
-                ts.Enabled = (((ReportSource)entity).MetaSourceGUID != null);
-                treeContextMenuStrip.Items.Add(ts);
-            }
-            else
-            {
-                treeViewHelper.treeContextMenuStrip_Opening(sender, e);
+                Cursor.Current = Cursors.Default;
             }
         }
-
 
         private void addToolStripMenuItem_Click(object sender, EventArgs e)
         {
             object newEntity = null;
+            KeyEventArgs key = null;
             if (selectedEntity is SourceFolder && Report != null)
             {
                 MetaSource source = ((ToolStripMenuItem)sender).Tag as MetaSource;
                 ReportSource newSource = Report.AddSource(source);
                 newSource.IsNoSQL = ((ToolStripMenuItem)sender).Text.Contains("No SQL");
-                if (!newSource.IsNoSQL) newEntity = newSource.Connection;
-                else newEntity = newSource.MetaData.MasterTable;
                 if (source != null)
                 {
                     newSource.LoadRepositoryMetaSources(_repository);
                     newEntity = newSource;
                 }
+                if (newSource.IsNoSQL)
+                {
+                    //Add master table
+                    MetaTable master = MetaTable.Create();
+                    master.DynamicColumns = true;
+                    master.IsEditable = true;
+                    master.Alias = MetaData.MasterTableName;
+                    master.Source = newSource;
+                    newSource.MetaData.Tables.Add(master);
+                }
+                if (!newSource.IsNoSQL) newEntity = newSource.Connection;
+                else newEntity = newSource.MetaData.MasterTable;
             }
             else if (selectedEntity is ModelFolder)
             {
-                newEntity = _report.AddModel();
+                bool isSQLModel = (int)((ToolStripMenuItem)sender).Tag == 2;
+                newEntity = _report.AddModel(isSQLModel); //1 Meta Model, 2 SQL Model
+                if (isSQLModel) key = new KeyEventArgs(Keys.F7);
             }
             else if (selectedEntity is ViewFolder)
             {
@@ -959,6 +1026,8 @@ namespace Seal
             {
                 IsModified = true;
                 init(newEntity);
+
+                if (key != null) toolStripHelper.HandleShortCut(key);
             }
         }
 
@@ -975,6 +1044,54 @@ namespace Seal
             {
                 Cursor.Current = Cursors.Default;
             }
+        }
+
+        private void convertModel(object sender, EventArgs e)
+        {
+            var model = selectedEntity as ReportModel;
+
+            if (model.IsSQLModel)
+            {
+                var alias = model.Table.Alias;
+                foreach (var col in model.Table.Columns) col.Name = model.Table.Alias + "." + col.Name;
+                model.Source.MetaData.Tables.Add(model.Table);
+                model.Table = null;
+                MessageBox.Show(string.Format("A table named '{0}' has been created in the Data Source '{1}'.\r\nThe model is now a MetaData model.", alias, model.Source.Name), "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                //Set column names
+                foreach (var el in model.Elements) el.SQLColumnName = el.MetaColumn.Name.Replace(el.MetaColumn.MetaTable.AliasName + ".", "");
+                foreach (var re in model.Restrictions) re.SQLColumnName = re.MetaColumn.Name.Replace(re.MetaColumn.MetaTable.AliasName + ".", "");
+                foreach (var re in model.AggregateRestrictions) re.SQLColumnName = re.MetaColumn.Name.Replace(re.MetaColumn.MetaTable.AliasName + ".", "");
+
+                model.BuildSQL(true);
+                model.Table = MetaTable.Create();
+                model.Table.DynamicColumns = true;
+                model.Table.Sql = model.Sql;
+                model.RefreshMetaTable(false);
+
+                //Set new metacolumn GUID
+                foreach (var el in model.Elements)
+                {
+                    var col = model.Table.Columns.FirstOrDefault(i => i.Name == el.SQLColumnName);
+                    if (col != null) el.MetaColumnGUID = col.GUID;
+                }
+                foreach (var re in model.Restrictions)
+                {
+                    var col = model.Table.Columns.FirstOrDefault(i => i.Name == re.SQLColumnName);
+                    if (col != null) re.MetaColumnGUID = col.GUID;
+                }
+                foreach (var re in model.AggregateRestrictions)
+                {
+                    var col = model.Table.Columns.FirstOrDefault(i => i.Name == re.SQLColumnName);
+                    if (col != null) re.MetaColumnGUID = col.GUID;
+                }
+
+                MessageBox.Show("The model is now a SQL model having the original SQL generated.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            SetModified();
+            init(model);
         }
 
         private void convertReportSourceAsRepositorySource(object sender, EventArgs e)
@@ -1056,6 +1173,7 @@ namespace Seal
                 views.Add((ReportView)newEntity);
                 _report.InitReferences();
                 ((RootComponent)newEntity).GUID = Guid.NewGuid().ToString();
+                if (!string.IsNullOrEmpty(((ReportView)newEntity).WidgetDefinition.GUID)) ((ReportView)newEntity).WidgetDefinition.GUID = Guid.NewGuid().ToString();
                 ((ReportView)newEntity).ReinitGUIDChildren();
                 ((RootComponent)newEntity).Name = Helper.GetUniqueName(((RootComponent)selectedEntity).Name + " - Copy", (from i in views select i.Name).ToList());
                 int idx = 1;
@@ -1262,7 +1380,7 @@ namespace Seal
                 if (MessageBox.Show("This report has no Model and cannot be executed. Do you want to create a Model now ?", "Warning", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
                 {
                     IsModified = true;
-                    init(_report.AddModel());
+                    init(_report.AddModel(false));
                 }
                 return;
             }
@@ -1447,7 +1565,13 @@ namespace Seal
             }
             else if (selectedEntity is ReportModel)
             {
-                if (((ReportModel)selectedEntity).Elements.Count >0) toolStripHelper.HandleShortCut(new KeyEventArgs(Keys.F8));
+                if (((ReportModel)selectedEntity).IsSQLModel) toolStripHelper.HandleShortCut(new KeyEventArgs(Keys.F7));
+                else if (((ReportModel)selectedEntity).Elements.Count > 0) toolStripHelper.HandleShortCut(new KeyEventArgs(Keys.F8));
+            }
+            else if (selectedEntity is ReportView)
+            {
+                ReportView view = (ReportView)selectedEntity;
+                if (view.UseCustomTemplate) toolStripHelper.HandleShortCut(new KeyEventArgs(Keys.F8));
             }
             else if (selectedEntity is ReportSchedule)
             {
@@ -1471,6 +1595,38 @@ namespace Seal
         private void ReportDesigner_KeyDown(object sender, KeyEventArgs e)
         {
             toolStripHelper.HandleShortCut(e);
+        }
+
+
+        private void nextWidget_Click(object sender, EventArgs e)
+        {
+            ReportView currentView = mainTreeView.SelectedNode.Tag as ReportView;
+
+            if (_report != null)
+            {
+                List<ReportView> widgets = _report.GetWidgetViews();
+                if (widgets.Count > 0)
+                {
+                    ReportView view = widgets[0];
+                    if (currentView != null)
+                    {
+                        for (int i = 0; i < widgets.Count; i++)
+                        {
+                            if (currentView == widgets[i])
+                            {
+                                if (i == widgets.Count - 1) view = widgets[0];
+                                else view = widgets[i + 1];
+                            }
+                        }
+                    }
+                    _widgetExpanded = true;
+                    selectNode(view);
+                }
+                else
+                {
+                    MessageBox.Show("This report has no Widget published for Dashboards", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
         }
 
         #endregion

@@ -1,11 +1,7 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.ComponentModel;
 
 namespace Seal.Model
@@ -33,6 +29,16 @@ namespace Seal.Model
         MSSQLServer,
         [Description("MySQL")]
         MySQL,
+    }
+
+    public enum ConnectionType
+    {
+        [Description("OleDb")]
+        OleDb,
+        [Description("Odbc")]
+        Odbc,
+        [Description("MS SQLServer")]
+        MSSQLServer,
     }
 
     public enum ColumnType
@@ -236,6 +242,12 @@ namespace Seal.Model
         ThisQuarter,
         [Description("This Year")]
         ThisYear,
+        [Description("This Hour")]
+        ThisHour,
+        [Description("This Minute")]
+        ThisMinute,
+        [Description("This Semester")]
+        ThisSemester,
     }
 
     public enum AxisType
@@ -350,6 +362,8 @@ namespace Seal.Model
         Prompt,
         [Description("Prompt only one value")]
         PromptOneValue,
+        [Description("Prompt only two values")]
+        PromptTwoValues,
     }
 
     public enum ViewParameterType
@@ -413,6 +427,26 @@ namespace Seal.Model
         Selection,
     }
 
+    public enum ViewType
+    {
+        [Description("View reports only")]
+        Reports,
+        [Description("View dashboards only")]
+        Dashboards,
+        [Description("View reports and dashboards")]
+        ReportsDashboards,
+    }
+
+    public enum DashboardFolderRight
+    {
+        [Description("No right")]
+        None,
+        [Description("View dashboards")]
+        Execute,
+        [Description("Edit dashboards")]
+        Edit,
+    }
+
     public enum FailoverEmailMode
     {
         [Description("Only for the first failure")]
@@ -433,5 +467,45 @@ namespace Seal.Model
         OneFilePerReport,
         [Description("Log in one file per execution")]
         OneFilePerExecution,
+    }
+
+    public enum YesNoDefault
+    {
+        [Description("Default")]
+        Default,
+        [Description("Yes")]
+        Yes,
+        [Description("No")]
+        No,
+    }
+
+    public enum NavigationType
+    {
+        Drill,
+        SubReport,
+        Hyperlink,
+        FileDownload,
+        ReportScript
+    }
+
+    public enum ExecutionStep
+    {
+        [Description("Before models generation")]
+        BeforeModel,
+        [Description("Models generated, before rendering")]
+        BeforeRendering,
+        [Description("Rendering is done, before output execution")]
+        BeforeOutput,
+        [Description("After execution")]
+        AfterExecution
+    }
+
+    public enum AuditType
+    {
+        Login,
+        Logout,
+        ReportExecution,
+        ReportDelete,
+        ReportSave,
     }
 }

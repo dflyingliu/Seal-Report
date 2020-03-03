@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -13,109 +13,95 @@ using System.Globalization;
 using Microsoft.Win32.TaskScheduler;
 using System.Threading;
 using System.Text;
+using System.Diagnostics;
+using System.Xml;
+using RazorEngine.Templating;
+using System.ComponentModel;
+using Seal.Forms;
+using System.Drawing.Design;
+using DynamicTypeDescriptor;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// Main Seal Report Objects: Repository (Sources, MetaData), Reports (Models, Views)   
+    /// </summary>
+    internal class NamespaceDoc
+    {
+    }
+
+    /// <summary>
+    /// Interface dedicated to log execution messages
+    /// </summary>
     public interface ReportExecutionLog
     {
+        /// <summary>
+        /// Log a message displayed in the messages panel of the report result
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="args"></param>
         void LogMessage(string message, params object[] args);
     }
 
-    public class Report : ReportExecutionLog
+    /// <summary>
+    /// The main Report class to store a report definition, plus extra properties for execution 
+    /// </summary>
+    public class Report : RootEditor, ReportExecutionLog, ITreeSort
     {
-        private string _GUID;
-        public string GUID
-        {
-            get { return _GUID; }
-            set { _GUID = value; }
-        }
+        #region Editor
 
-        private List<ReportSource> _sources = new List<ReportSource>();
-        public List<ReportSource> Sources
+        protected override void UpdateEditorAttributes()
         {
-            get { return _sources; }
-            set { _sources = value; }
-        }
-
-        private List<ReportModel> _models = new List<ReportModel>();
-        public List<ReportModel> Models
-        {
-            get { return _models; }
-            set { _models = value; }
-        }
-
-        private List<ReportOutput> _outputs = new List<ReportOutput>();
-        public List<ReportOutput> Outputs
-        {
-            get { return _outputs; }
-            set { _outputs = value; }
-        }
-
-        private List<ReportTask> _taks = new List<ReportTask>();
-        public List<ReportTask> Tasks
-        {
-            get { return _taks; }
-            set { _taks = value; }
-        }
-
-        List<CommonScript> _commonScripts = new List<CommonScript>();
-        public List<CommonScript> CommonScripts
-        {
-            get { return _commonScripts; }
-            set { _commonScripts = value; }
-        }
-
-        [XmlIgnore]
-        public string CommonScriptsHeader
-        {
-            get
+            if (_dctd != null)
             {
-                var result = "";
-                foreach (var script in CommonScripts) result += script.Script + "\r\n";                
-                return result;
+                //Disable all properties
+                foreach (var property in Properties) property.SetIsBrowsable(false);
+                //Then enable
+                GetProperty("DisplayName").SetIsBrowsable(true);
+                GetProperty("ViewGUID").SetIsBrowsable(true);
+                GetProperty("InputValues").SetIsBrowsable(true);
+                GetProperty("WidgetCache").SetIsBrowsable(true);
+
+                GetProperty("CommonScripts").SetIsBrowsable(true);
+                GetProperty("InitScript").SetIsBrowsable(true);
+                GetProperty("NavigationScript").SetIsBrowsable(true);
+                //GetProperty("CommonScripts").SetDisplayName("Common Scripts: " + (Report.CommonScripts.Count == 0 ? "None" : Report.CommonScripts.Count.ToString() + " Items(s)"));
+                TypeDescriptor.Refresh(this);
             }
         }
 
-        public string GetCommonScriptsHeader(CommonScript scriptBeingEdited)
-        {
-            var result = "";
-            foreach (var script in CommonScripts.Where(i => i != scriptBeingEdited)) result += script.Script + "\r\n";
-            return result;
-        }
+        #endregion
 
-        private string _tasksScript = "";
-        public string TasksScript
-        {
-            get { return _tasksScript; }
-            set { _tasksScript = value; }
-        }
+        public int GetSort() { return 0; }
 
-        private List<ReportView> _views = new List<ReportView>();
-        public List<ReportView> Views
-        {
-            get { return _views; }
-            set { _views = value; }
-        }
+        /// <summary>
+        /// Unique identifier of the report
+        /// </summary>
+        public string GUID { get; set; }
 
-        private string _displayName = "";
-        public string DisplayName
-        {
-            get { return _displayName; }
-            set { _displayName = value; }
-        }
+        /// <summary>
+        /// The report name displayed in the result. If empty, the report file name is used. The display name may contain a Razor script  if it starts with '@'.
+        /// </summary>
+        [Category("Definition"), DisplayName("Display name"), Description("The report name displayed in the result. If empty, the report file name is used. The display name may contain a Razor script  if it starts with '@'."), Id(1, 1)]
+        [Editor(typeof(TemplateTextEditor), typeof(UITypeEditor))]
+        public string DisplayName { get; set; } = "";
+        public bool ShouldSerializeDisplayName() { return !string.IsNullOrEmpty(DisplayName); }
 
         private string _displayNameEx = null;
+        /// <summary>
+        /// The final display name of the report. It may include script execution defined in DisplayName
+        /// </summary>
         [XmlIgnore]
         public string DisplayNameEx
         {
             get
             {
                 if (!string.IsNullOrEmpty(_displayNameEx)) return _displayNameEx;
-                if (!string.IsNullOrEmpty(_displayName))
+                if (!string.IsNullOrEmpty(DisplayName))
                 {
                     try
                     {
-                        _displayNameEx = RazorHelper.CompileExecute(_displayName, this);
+                        _displayNameEx = RazorHelper.CompileExecute(DisplayName, this);
                     }
                     catch { }
                 }
@@ -127,42 +113,226 @@ namespace Seal.Model
             }
         }
 
-        private string _initScript = "";
-        public string InitScript
-        {
-            get { return _initScript; }
-            set { _initScript = value; }
-        }
+        [DefaultValue(null)]
+        [Category("Definition"), DisplayName("Current view"), Description("The current view used to execute the report."), Id(2, 1)]
+        [TypeConverter(typeof(ReportViewConverter))]
+        public string ViewGUID { get; set; }
 
-        private string _viewGUID;
-        public string ViewGUID
-        {
-            get { return _viewGUID; }
-            set { _viewGUID = value; }
-        }
-
+        /// <summary>
+        /// GUID of the view to being executed
+        /// </summary>
         public string CurrentViewGUID;
 
-        private List<ReportSchedule> _schedules = new List<ReportSchedule>();
-        public List<ReportSchedule> Schedules
+        /// <summary>
+        /// Definition of additional report input values (actually a restriction used as value only that may be prompted). Input values can then be used in the task scripts or any scripts used to generate the report.
+        /// </summary>
+        [Category("Definition"), DisplayName("Report Input Values"), Description("Definition of additional report input values (actually a restriction used as value only that may be prompted). Input values can then be used in the task scripts or any scripts used to generate the report."), Id(3, 1)]
+        [Editor(typeof(EntityCollectionEditor), typeof(UITypeEditor))]
+        public List<ReportRestriction> InputValues { get; set; } = new List<ReportRestriction>();
+        public bool ShouldSerializeInputValues() { return InputValues.Count > 0; }
+
+        /// <summary>
+        /// For dashboards, the duration in seconds the report execution is kept by the Web Report Server to render the widgets defined in the report.
+        /// </summary>
+        [Category("Definition"), DisplayName("Widgets cache duration"), Description("For dashboards, the duration in seconds the report execution is kept by the Web Report Server to render the widgets defined in the report."), Id(5, 1)]
+        [DefaultValue(60)]
+        public int WidgetCache { get; set; } = 60;
+        public bool ShouldSerializeWidgetCache() { return WidgetCache != 60; }
+
+        /// <summary>
+        /// List of data sources of the report (either from repository or defined in the report itself)
+        /// </summary>
+        public List<ReportSource> Sources { get; set; } = new List<ReportSource>();
+
+        public bool ShouldSerializeSources() { return Sources.Count > 0; }
+
+        /// <summary>
+        /// List of models of the report
+        /// </summary>
+        public List<ReportModel> Models { get; set; } = new List<ReportModel>();
+
+
+        public bool ShouldSerializeModels() { return Models.Count > 0; }
+
+        /// <summary>
+        /// List of outputs of the report
+        /// </summary>
+        public List<ReportOutput> Outputs { get; set; } = new List<ReportOutput>();
+        public bool ShouldSerializeOutputs() { return Outputs.Count > 0; }
+
+        /// <summary>
+        /// List of tasks of the report
+        /// </summary>
+        public List<ReportTask> Tasks { get; set; } = new List<ReportTask>();
+        public bool ShouldSerializeTasks()
         {
-            get { return _schedules; }
-            set { _schedules = value; }
+            return Tasks.Count > 0;
         }
 
+        /// <summary>
+        /// List of scripts added to all scripts executed for the report (including tasks). This may be useful to defined common functions for the report.
+        /// </summary>
+        [Category("Scripts"), DisplayName("Common Scripts"), Description("List of scripts added to all scripts executed for the report (including tasks). This may be useful to defined common functions for the report."), Id(1, 2)]
+        [Editor(typeof(EntityCollectionEditor), typeof(UITypeEditor))]
+        public List<CommonScript> CommonScripts { get; set; } = new List<CommonScript>();
+        public bool ShouldSerializeCommonScripts() { return CommonScripts.Count > 0; }
+
+        /// <summary>
+        /// The header to include in razor scripts executed for this report
+        /// </summary>
+        [XmlIgnore]
+        public string CommonScriptsHeader
+        {
+            get
+            {
+                var result = "";
+                foreach (var script in CommonScripts) result += script.Script + "\r\n";
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// The header to include in razor scripts executed for this report, except the one being edited
+        /// </summary>
+        public string GetCommonScriptsHeader(CommonScript scriptBeingEdited)
+        {
+            var result = "";
+            foreach (var script in CommonScripts.Where(i => i != scriptBeingEdited)) result += script.Script + "\r\n";
+            return result;
+        }
+
+        /// <summary>
+        /// Returns a common script key from a given name and model
+        /// </summary>      
+        public string GetReportCommonScriptKey(string name, object model)
+        {
+            var script = CommonScripts.FirstOrDefault(i => i.Name == name); 
+            if (script == null) throw new Exception(string.Format("Unable to find a report common script  named '{0}'...", name));            
+
+            string key = string.Format("REPCS:{0}_{1}_{2}_{3}", FilePath, GUID, name, File.GetLastWriteTime(FilePath).ToString("s"));
+            try
+            {
+                RazorHelper.Compile(script.Script, model.GetType(), key);
+            }
+            catch (Exception ex)
+            {
+                var message = (ex is TemplateCompilationException ? Helper.GetExceptionMessage((TemplateCompilationException)ex) : ex.Message);
+                ExecutionErrors += string.Format("Execution error when compiling the common script '{0}':\r\n{1}\r\n", name, message);
+                if (ex.InnerException != null) ExecutionErrors += "\r\n" + ex.InnerException.Message;
+                throw ex;
+            }
+            return key;
+        }
+
+        /// <summary>
+        /// Returns an input value (Report Restriction) from a given name
+        /// </summary>
+        public ReportRestriction GetInputValueByName(string name)
+        {
+            return InputValues.FirstOrDefault(i => i.DisplayNameEl.ToLower() == name.ToLower());
+        }
+
+        /// <summary>
+        /// The current list of input values restrictions of the report at execution time
+        /// </summary>
+        [XmlIgnore]
+        public List<ReportRestriction> ExecutionInputValues
+        {
+            get
+            {
+                List<ReportRestriction> result = new List<ReportRestriction>();
+                foreach (ReportRestriction restriction in InputValues)
+                {
+                    ReportRestriction newRestriction = restriction;
+                    if (ForOutput && OutputToExecute.UseCustomRestrictions)
+                    {
+                        newRestriction = OutputToExecute.Restrictions.FirstOrDefault(i => i.GUID == restriction.GUID);
+                        if (newRestriction == null) newRestriction = restriction;
+                    }
+                    result.Add(newRestriction);
+                }
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// List of views of the report
+        /// </summary>
+        public List<ReportView> Views { get; set; } = new List<ReportView>();
+
+        /// <summary>
+        /// A Razor script executed when the report is initialized for the execution. The script can be used to modify the report definition (e.g. set default values in restrictions). 
+        /// </summary>
+        [Category("Scripts"), DisplayName("Report Execution Init script"), Description("A Razor script executed when the report is initialized for the execution. The script can be used to modify the report definition (e.g. set default values in restrictions)."), Id(2, 2)]
+        [Editor(typeof(TemplateTextEditor), typeof(UITypeEditor))]
+        public string InitScript { get; set; } = "";
+        public bool ShouldSerializeInitScript() { return !string.IsNullOrEmpty(InitScript); }
+
+        /// <summary>
+        /// Optional Razor Script executed if script navigation links have been added in the CellScript
+        /// </summary>
+        [Category("Scripts"), DisplayName("Report Navigation Script"), Description("Optional Razor Script executed if script navigation links have been added to the report (e.g. in a dedicated task)."), Id(3, 2)]
+        [Editor(typeof(TemplateTextEditor), typeof(UITypeEditor))]
+        [DefaultValue("")]
+        public string NavigationScript { get; set; }
+        public bool ShouldSerializeNavigationScript() { return !string.IsNullOrEmpty(NavigationScript); }
+
+
+        /// <summary>
+        /// Get the hyperlink string to execute the report navigation script.
+        /// </summary>
+        public string GetReportNavigationScriptLink(string text = "", string linkTag = "")
+        {
+            var guid = Guid.NewGuid().ToString();
+            var link = new NavigationLink() { Type = NavigationType.ReportScript, Href = guid, Text = text, Report = this, Tag = linkTag };
+            NavigationLinks.Add(guid, link);
+            return link.FullHref;
+        }
+
+        /// <summary>
+        /// Get the hyperlink string to execute the report navigation script to download a file.
+        /// </summary>
+        public string GetReportNavigationFileDownloadLink(string text = "", string linkTag = "")
+        {
+            var guid = Guid.NewGuid().ToString();
+            var link = new NavigationLink() { Type = NavigationType.FileDownload, Href = guid, Text = text, Report = this, Tag = linkTag };
+            NavigationLinks.Add(guid, link);
+            return link.FullHref;
+        }
+
+        /// <summary>
+        /// List of schedules of the report
+        /// </summary>
+        public List<ReportSchedule> Schedules { get; set; } = new List<ReportSchedule>();
+        public bool ShouldSerializeSchedules() { return Schedules.Count > 0; }
+
+        /// <summary>
+        /// Current repository of the report
+        /// </summary>
         [XmlIgnore]
         public Repository Repository = null;
 
+        /// <summary>
+        /// Current file path of the report
+        /// </summary>
         [XmlIgnore]
         public string FilePath = "";
 
+        /// <summary>
+        /// Last modification date of the report file 
+        /// </summary>
         [XmlIgnore]
         public DateTime LastModification;
 
-
+        /// <summary>
+        /// Path of the result file after a report execution 
+        /// </summary>
         [XmlIgnore]
         public string ResultFilePath;
 
+        /// <summary>
+        /// File path displayed to the user
+        /// </summary>
         [XmlIgnore]
         public string DisplayResultFilePath
         {
@@ -183,17 +353,23 @@ namespace Seal.Model
         }
 
         string _HTMLDisplayFilePath = "";
+        /// <summary>
+        /// Path of the HTML intermediate result file
+        /// </summary>
         [XmlIgnore]
         public string HTMLDisplayFilePath
         {
             get
             {
-                if (string.IsNullOrEmpty(_HTMLDisplayFilePath)) _HTMLDisplayFilePath = FileHelper.GetUniqueFileName(Path.Combine(GenerationFolder, "result.htm"));
+                if (string.IsNullOrEmpty(_HTMLDisplayFilePath)) _HTMLDisplayFilePath = FileHelper.GetUniqueFileName(Path.Combine(GenerationFolder, "result.html"));
                 return _HTMLDisplayFilePath;
             }
             set { _HTMLDisplayFilePath = value; }
         }
 
+        /// <summary>
+        /// Path of the folder when executed to an output device
+        /// </summary>
         [XmlIgnore]
         public string OutputFolderDeviceResultFolder
         {
@@ -215,15 +391,21 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// URL when executed from the Web Report Server 
+        /// </summary>
         [XmlIgnore]
         public string WebUrl = "";
 
-        [XmlIgnore]
-        public bool IsMobileDevice = false;
-
+        /// <summary>
+        /// Current identifier of the report's execution
+        /// </summary>
         [XmlIgnore]
         public string ExecutionGUID = Guid.NewGuid().ToString();
 
+        /// <summary>
+        /// Current folder use for the file generation during execution
+        /// </summary>
         [XmlIgnore]
         public string GenerationFolder
         {
@@ -233,6 +415,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Current file name of the result file
+        /// </summary>
         [XmlIgnore]
         public string ResultFileName
         {
@@ -252,15 +437,26 @@ namespace Seal.Model
                     }
                 }
                 if (string.IsNullOrEmpty(fileName)) fileName = "result";
-                fileName = Helper.CleanFileName(fileName) + ".htm";
+                fileName = Helper.CleanFileName(fileName) + ".html";
                 if (!ForOutput) fileName = fileName.Replace(" ", "_");
                 return fileName;
             }
         }
 
+        /// <summary>
+        /// Procedure executed before any execution: set default parameters values and executes init scripts.
+        /// </summary>
         public void InitForExecution()
         {
             string fileName = "", fileFolder = "";
+            var template = ExecutionView.Template; //This force to init parameters
+
+            //Copy values from reference views
+            foreach (var view in FullViewList.Where(i => i.ReferenceView != null))
+            {
+                view.InitFromReferenceView();
+            }
+
             if (ForOutput)
             {
                 //Check custom Output Parameters 
@@ -282,10 +478,9 @@ namespace Seal.Model
 
             try
             {
-                var template = ExecutionView.Template; //This force to init parameters
                 fileName = ResultFileName;
                 fileFolder = FileHelper.TempApplicationDirectory;
-        
+
                 if (ForOutput && OutputToExecute.Device is OutputFolderDevice)
                 {
                     if (Format != ReportFormat.pdf && Format != ReportFormat.excel) fileFolder = OutputFolderDeviceResultFolder;
@@ -298,7 +493,7 @@ namespace Seal.Model
                     ResultFilePath = FileHelper.GetUniqueFileName(Path.Combine(fileFolder, fileName), "." + ResultExtension);
                 }
                 //Display path is always an HTML one...
-                HTMLDisplayFilePath = FileHelper.GetUniqueFileName(Path.Combine(GenerationFolder, FileHelper.GetResultFilePrefix(ResultFilePath) + ".htm"));
+                HTMLDisplayFilePath = FileHelper.GetUniqueFileName(Path.Combine(GenerationFolder, FileHelper.GetResultFilePrefix(ResultFilePath) + ".html"));
 
                 //Clear some cache values...
                 _displayNameEx = null;
@@ -309,9 +504,17 @@ namespace Seal.Model
                 Cancel = true;
                 if (string.IsNullOrEmpty(fileFolder) && OutputToExecute != null && !string.IsNullOrEmpty(OutputToExecute.FolderPath)) fileFolder = OutputToExecute.FolderPath;
                 ExecutionErrors += string.Format("Error initializing report Path, check your report execution or output Path '{0}'\r\n{1}\r\n", Path.Combine(fileFolder, fileName), ex.Message);
+                ExecutionErrorStackTrace = ex.StackTrace;
             }
 
             //Init scripts
+
+            //Load converter assembly
+            if (ExecutionView != null)
+            {
+                var converter = ExecutionView.PdfConverter;
+            }
+
             //First config
             if (!string.IsNullOrEmpty(Repository.Configuration.InitScript))
             {
@@ -322,6 +525,7 @@ namespace Seal.Model
                 catch (Exception ex2)
                 {
                     ExecutionErrors += string.Format("Error executing configuration init script:\r\n{0}\r\n", ex2.Message);
+                    ExecutionErrorStackTrace = ex2.StackTrace;
                 }
             }
 
@@ -337,6 +541,7 @@ namespace Seal.Model
                     catch (Exception ex2)
                     {
                         ExecutionErrors += string.Format("Error executing source init script for '{0}'\r\n{1}\r\n", source.Name, ex2.Message);
+                        ExecutionErrorStackTrace = ex2.StackTrace;
                     }
                 }
             }
@@ -351,18 +556,38 @@ namespace Seal.Model
                 catch (Exception ex2)
                 {
                     ExecutionErrors += string.Format("Error executing report init script:\r\n{0}\r\n", ex2.Message);
+                    ExecutionErrorStackTrace = ex2.StackTrace;
                 }
             }
         }
 
+        /// <summary>
+        /// After execution, indicates if the report has validation errors
+        /// </summary>
         [XmlIgnore]
         public bool HasValidationErrors = false;
+
+        /// <summary>
+        ///Execution messages after execution
+        /// </summary>
         [XmlIgnore]
         public string ExecutionMessages;
+
+        /// <summary>
+        ///Execution errors after execution
+        /// </summary>
         [XmlIgnore]
         public string ExecutionErrors;
+
+        /// <summary>
+        ///Execution errors stack trace after execution
+        /// </summary>
         [XmlIgnore]
         public string ExecutionErrorStackTrace;
+
+        /// <summary>
+        ///Execution errors after execution used by the Web Report Server
+        /// </summary>
         [XmlIgnore]
         public string WebExecutionErrors
         {
@@ -372,33 +597,57 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Indicates if the execution messages are shown in the report
+        /// </summary>
         [XmlIgnore]
         public bool ShowExecutionMessages
         {
             get
             {
-                return ExecutionView.GetValue("messages_mode") == "enabledshown" || (ExecutionView.GetValue("messages_mode") == "enabled" && !string.IsNullOrEmpty(WebExecutionErrors));
+                return ((ExecutionView.GetValue("messages_mode") == "enabledshown")
+                    || (ExecutionView.GetValue("messages_mode") == "enabledshownexec" &&  (Status == ReportStatus.NotExecuted || Status == ReportStatus.Executing))
+                    || (ExecutionView.GetValue("messages_mode") == "enabled" && !string.IsNullOrEmpty(WebExecutionErrors))
+                    );
             }
         }
 
+        /// <summary>
+        /// Error messages got during the load of the report
+        /// </summary>
         [XmlIgnore]
         public string LoadErrors = "";
 
+        /// <summary>
+        /// Warning messages in case of product upgrade
+        /// </summary>
         [XmlIgnore]
         public string UpgradeWarnings = "";
 
+        /// <summary>
+        /// Error messages got during the parsing of the templates
+        /// </summary>
         [XmlIgnore]
         public string TemplateParsingErrors;
 
+        /// <summary>
+        /// Execution status of the report
+        /// </summary>
         [XmlIgnore]
         public ReportStatus Status = ReportStatus.NotExecuted;
 
+        /// <summary>
+        /// Name of the report during its execution
+        /// </summary>
         [XmlIgnore]
         public string ExecutionName
         {
             get { return TranslateDisplayName((string.IsNullOrEmpty(DisplayNameEx) ? ExecutionView.Name : DisplayNameEx)) + (OutputToExecute != null && Status != ReportStatus.RenderingResult ? string.Format(" - {0}", TranslateOutputName(OutputToExecute.Name)) : ""); }
         }
 
+        /// <summary>
+        /// List of tasks to be executed (actually tasks enabled)
+        /// </summary>
         [XmlIgnore]
         public List<ReportTask> ExecutionTasks
         {
@@ -408,19 +657,24 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// List of model to process during the report execution. By default, only models involved in displayed views are executed, unless they have the ForceModelsLoad flag set to true.
+        /// </summary>
         [XmlIgnore]
         public List<ReportModel> ExecutionModels
         {
             get
             {
                 List<ReportModel> result = new List<ReportModel>();
-                if (ExecutionView.GetBoolValue("force_models_load")) result = Models.ToList();
+                if (ExecutionView.GetBoolValue(Parameter.ForceModelsLoad)) result = Models.ToList();
                 else GetModelsToExecute(ExecutionView, result);
                 return result;
             }
         }
 
-        //Progression values and messages
+        /// <summary>
+        /// Execution progression in percentage
+        /// </summary>
         [XmlIgnore]
         public int ExecutionProgression
         {
@@ -434,6 +688,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Execution progression message
+        /// </summary>
         [XmlIgnore]
         public string ExecutionProgressionMessage
         {
@@ -441,12 +698,15 @@ namespace Seal.Model
             {
                 TimeSpan duration = DateTime.Now - ExecutionStartDate;
                 StringBuilder message = new StringBuilder("");
-                if (duration.Hours > 0) message.AppendFormat("{0:00}:", Convert.ToInt32(duration.TotalHours));
+                if (duration.Hours > 0) message.AppendFormat("{0:00}:", Convert.ToInt32(duration.Hours));
                 message.Append(string.Format("{0:00}:{1:00} {2}", duration.Minutes, duration.Seconds, Cancel ? Translate("Cancelling report...") : Translate("Executing report...")));
                 return message.ToString();
             }
         }
 
+        /// <summary>
+        /// Execution progression percentage for the models processing
+        /// </summary>
         [XmlIgnore]
         public int ExecutionProgressionModels
         {
@@ -456,6 +716,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Execution progression percentage message for the models processing
+        /// </summary>
         [XmlIgnore]
         public string ExecutionProgressionModelsMessage
         {
@@ -465,6 +728,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Execution progression percentage for the tasks processing
+        /// </summary>
         [XmlIgnore]
         public int ExecutionProgressionTasks
         {
@@ -474,6 +740,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Execution progression percentage for the tasks processing
+        /// </summary>
         [XmlIgnore]
         public string ExecutionProgressionTasksMessage
         {
@@ -483,55 +752,109 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if the report is being tested for execution (from the Server Manager)
+        /// </summary>
         [XmlIgnore]
         public bool CheckingExecution = false;
 
+        /// <summary>
+        /// True if the schedules have been modified
+        /// </summary>
         [XmlIgnore]
         public bool SchedulesModified = false;
 
+        /// <summary>
+        /// True if the schedules have to be defined with the current user, otherwise SYSTEM is used
+        /// </summary>
         [XmlIgnore]
         public bool SchedulesWithCurrentUser = false;
 
+        /// <summary>
+        /// True if the report is being executed
+        /// </summary>
         [XmlIgnore]
         public bool IsExecuting
         {
             get { return (Status != ReportStatus.NotExecuted && Status != ReportStatus.Executed); }
         }
+
+        /// <summary>
+        /// True if the report is cancel
+        /// </summary>
         [XmlIgnore]
         public bool Cancel = false;
+
+        /// <summary>
+        /// True if the report has only to be rendered
+        /// </summary>
         [XmlIgnore]
         public bool RenderOnly = false;
+
+        /// <summary>
+        /// Execution start date time
+        /// </summary>
         [XmlIgnore]
         public DateTime ExecutionStartDate;
+
+        /// <summary>
+        /// Rendering date time
+        /// </summary>
         [XmlIgnore]
         public DateTime ExecutionRenderingDate;
+
+        /// <summary>
+        /// Execution end date time
+        /// </summary>
         [XmlIgnore]
         public DateTime ExecutionEndDate;
+
+        /// <summary>
+        /// Duration of the model execution
+        /// </summary>
         [XmlIgnore]
         public TimeSpan ExecutionModelDuration
         {
             get { return (ExecutionRenderingDate - ExecutionStartDate); }
         }
 
+        /// <summary>
+        /// True is the report execution occured after an navigation (sub-report or drill)
+        /// </summary>
         [XmlIgnore]
         public bool IsNavigating = false; //If false, do evaluate restrictions prompted...
 
+        /// <summary>
+        /// True if the report has navigation links in the result
+        /// </summary>
         [XmlIgnore]
         public bool HasNavigation = false; //If true, navigation must be activated...
 
         //Output management
+        /// <summary>
+        /// Current report output to execute
+        /// </summary>
         [XmlIgnore]
         public ReportOutput OutputToExecute = null;
+
+        /// <summary>
+        /// True if the execution is for a report output
+        /// </summary>
         [XmlIgnore]
         public bool ForOutput
         {
             get { return OutputToExecute != null; }
         }
 
-        //One task only
+        /// <summary>
+        /// Task set if only one task has to be executed
+        /// </summary>
         [XmlIgnore]
         public ReportTask TaskToExecute = null;
 
+        /// <summary>
+        /// True if the html display result is being generated
+        /// </summary>
         [XmlIgnore]
         public bool GenerateHTMLDisplay
         {
@@ -541,8 +864,11 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if the report is not for an output and has no external viewer
+        /// </summary>
         [XmlIgnore]
-        public bool IsBasicHTMLWithNoOutput //Indicates that the report is not for an output and has no external viewer
+        public bool IsBasicHTMLWithNoOutput
         {
             get
             {
@@ -550,12 +876,27 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Context of the execution:  DesignerReport, DesignerOutput, TaskScheduler, WebReport, WebOutput
+        /// </summary>
         [XmlIgnore]
         public ReportExecutionContext ExecutionContext = ReportExecutionContext.DesignerReport;
 
+        /// <summary>
+        /// Current result format generated durin a View Result: html, print, csv, pdf, excel
+        /// </summary>
+        [XmlIgnore]
+        public string ExecutionViewResultFormat = "";
+
+        /// <summary>
+        /// Current security user of the report execution
+        /// </summary>
         [XmlIgnore]
         public SecurityUser SecurityContext = null;
 
+        /// <summary>
+        /// Root view being executed
+        /// </summary>
         [XmlIgnore]
         public ReportView ExecutionView
         {
@@ -572,23 +913,39 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Full execution duration
+        /// </summary>
         [XmlIgnore]
         public TimeSpan ExecutionFullDuration
         {
             get { return (ExecutionEndDate - ExecutionStartDate); }
         }
 
+        /// <summary>
+        /// Helper Dictionary to manage restrictions in the Web Report Server
+        /// </summary>
         [XmlIgnore]
         public Dictionary<string, string> PreInputRestrictions = new Dictionary<string, string>();
+
+        /// <summary>
+        /// Helper Dictionary to manage restrictions in the Web Report Server
+        /// </summary>
         [XmlIgnore]
         public Dictionary<string, string> InputRestrictions = new Dictionary<string, string>();
 
+        /// <summary>
+        /// Input restriction value for a given key
+        /// </summary>
         public string GetInputRestriction(string key)
         {
             if (InputRestrictions.ContainsKey(key)) return InputRestrictions[key];
             return "";
         }
 
+        /// <summary>
+        /// True if the execution has errors
+        /// </summary>
         [XmlIgnore]
         public bool HasErrors
         {
@@ -596,6 +953,9 @@ namespace Seal.Model
         }
 
         TaskFolder _taskFolder = null;
+        /// <summary>
+        /// Task Folder used to store the schedules of the report
+        /// </summary>
         public TaskFolder TaskFolder
         {
             get
@@ -610,36 +970,54 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if the report has restrictions to prompt
+        /// </summary>
         [XmlIgnore]
         public bool HasRestrictions
         {
             get { return ExecutionCommonRestrictions.Count > 0; }
         }
 
+        /// <summary>
+        /// True if the report has chart
+        /// </summary>
         [XmlIgnore]
         public bool HasChart
         {
             get { return HasNVD3Chart || HasChartJSChart || HasPlotlyChart; }
         }
 
+        /// <summary>
+        /// True if the report has NVD3 chart
+        /// </summary>
         [XmlIgnore]
         public bool HasNVD3Chart
         {
             get { return Models.Exists(i => i.HasNVD3Serie); }
         }
 
+        /// <summary>
+        /// True if the report has JS chart
+        /// </summary>
         [XmlIgnore]
         public bool HasChartJSChart
         {
             get { return Models.Exists(i => i.HasChartJSSerie); }
         }
 
+        /// <summary>
+        /// True if the report has Plotly chart
+        /// </summary>
         [XmlIgnore]
         public bool HasPlotlyChart
         {
             get { return Models.Exists(i => i.HasPlotlySerie); }
         }
 
+        /// <summary>
+        /// Encoding of the result file
+        /// </summary>
         [XmlIgnore]
         public Encoding ResultFileEncoding
         {
@@ -650,6 +1028,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Init all references of the report: Sources, Models, Views, Taks, InputValues
+        /// </summary>
         public void InitReferences()
         {
             //init report references in objects
@@ -686,6 +1067,11 @@ namespace Seal.Model
                 task.InitReferences();
             }
 
+            foreach (var restriction in InputValues)
+            {
+                restriction.Report = this;
+            }
+
             i = Outputs.Count;
             while (--i >= 0)
             {
@@ -712,18 +1098,22 @@ namespace Seal.Model
             }
         }
 
-
-        static public Report LoadFromFile(string path, Repository repository)
+        /// <summary>
+        /// Load a report from a file
+        /// </summary>
+        /// <returns>the report loaded and initialized</returns>
+        static public Report LoadFromFile(string path, Repository repository, bool refreshEnums = true)
         {
             Report result = null;
             try
             {
-                StreamReader sr = new StreamReader(path);
                 XmlSerializer serializer = new XmlSerializer(typeof(Report));
-                result = (Report)serializer.Deserialize(sr);
+                using (XmlReader xr = XmlReader.Create(path))
+                {
+                    result = (Report)serializer.Deserialize(xr);
+                }
                 result.FilePath = path;
                 result.Repository = repository;
-                sr.Close();
                 result.LastModification = File.GetLastWriteTime(path);
 
                 result.LoadErrors = "";
@@ -732,10 +1122,19 @@ namespace Seal.Model
                     source.Report = result;
                     source.LoadRepositoryMetaSources(repository);
                 }
+
+                if (result.Views.Count == 0)
+                {
+                    var view = result.AddRootView();
+                    view.Name = "View";
+                }
                 result.InitReferences();
 
                 //Refresh enums
-                foreach (ReportSource source in result.Sources) source.RefreshEnumsOnDbConnection();
+                if (refreshEnums)
+                {
+                    foreach (ReportSource source in result.Sources) source.RefreshEnumsOnDbConnection();
+                }
             }
             catch (Exception ex)
             {
@@ -744,6 +1143,10 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Create an empty report
+        /// </summary>
+        /// <returns>the new report</returns>
         static public Report Create(Repository repository)
         {
             Report result = new Report() { GUID = Guid.NewGuid().ToString() };
@@ -751,7 +1154,7 @@ namespace Seal.Model
             result.Repository = repository;
             foreach (MetaSource source in repository.Sources)
             {
-                ReportSource reportSource = result.AddSource(source);
+                result.AddSource(source);
             }
             if (result.Sources.Count == 0) result.AddSource(null);
             foreach (ReportSource source in result.Sources)
@@ -763,12 +1166,15 @@ namespace Seal.Model
                 if (source.IsNoSQL && source.MetaData.Tables.Count > 1) source.MetaData.Tables.RemoveAll(i => i.IsEditable);
             }
 
-            //and a first model
-            if (result.Models.Count == 0) result.AddModel();
+            //and a model
+            if (result.Models.Count == 0)
+            {
+                result.AddModel(false);
+            }
             //Add default views
-            ReportView defaultView = result.AddModelHTMLView();
-            if (defaultView == null) throw new Exception(string.Format("Unable to find any view in your repository. Check that your repository folder '{0}' contains all the default sub-folders and files...", repository.RepositoryPath));
-            result.ViewGUID = defaultView.GUID;
+            ReportView view = result.AddModelHTMLView();
+            if (view == null) throw new Exception(string.Format("Unable to find any view in your repository. Check that your repository folder '{0}' contains all the default sub-folders and files...", repository.RepositoryPath));
+            result.ViewGUID = view.GUID;
 
             //Creation script
             if (!string.IsNullOrEmpty(repository.Configuration.ReportCreationScript))
@@ -786,11 +1192,56 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Save the current report to its file
+        /// </summary>
         public void SaveToFile()
         {
             SaveToFile(FilePath);
         }
 
+        /// <summary>
+        /// Init view GUIDs and clear schedule before a report Copy
+        /// </summary>
+        public void InitGUIDAndSchedules()
+        {
+            GUID = Guid.NewGuid().ToString();
+
+            var newValues = new Dictionary<string, string>();
+
+            foreach (var view in FullViewList)
+            {
+                var newGUID = Guid.NewGuid().ToString();
+                newValues.Add(view.GUID, newGUID);
+                //Set new GUIDs
+                view.GUID = newGUID;
+                if (!string.IsNullOrEmpty(view.WidgetDefinition.GUID)) view.WidgetDefinition.GUID = Guid.NewGuid().ToString();
+            }
+
+            //Reference views
+            foreach (var view in FullViewList.Where(i => !string.IsNullOrEmpty(i.ReferenceViewGUID)))
+            {
+                view.ReferenceViewGUID = newValues[view.ReferenceViewGUID];
+                if (!string.IsNullOrEmpty(view.WidgetDefinition.ExecViewGUID)) view.WidgetDefinition.ExecViewGUID = newValues[view.WidgetDefinition.ExecViewGUID];
+            }
+
+            //Current view of the report
+            ViewGUID = newValues[ViewGUID];
+            CurrentViewGUID = ViewGUID;
+
+            //Output views
+            foreach (var output in Outputs)
+            {
+                output.ViewGUID = newValues[output.ViewGUID];
+            }
+            
+            //No schedule
+            Schedules.Clear();
+        }
+
+        /// <summary>
+        /// Synchronize all report schedules defined in the report with the Windows Task Scheduler.
+        /// </summary>
         public void SynchronizeTasks()
         {
             try
@@ -822,7 +1273,9 @@ namespace Seal.Model
             catch { }
         }
 
-
+        /// <summary>
+        /// Save report to a given file
+        /// </summary>
         public void SaveToFile(string path)
         {
             //Check last modification
@@ -838,7 +1291,8 @@ namespace Seal.Model
             {
                 Serialize(path);
             }
-            finally {
+            finally
+            {
                 FilePath = path;
                 LastModification = File.GetLastWriteTime(path);
             }
@@ -847,6 +1301,9 @@ namespace Seal.Model
             SchedulesModified = false;
         }
 
+        /// <summary>
+        /// Clone a report
+        /// </summary>
         public Report Clone()
         {
             foreach (var view in Views)
@@ -861,7 +1318,7 @@ namespace Seal.Model
             return report;
         }
 
-        public void Serialize(string path)
+        private void Serialize(string path)
         {
             try
             {
@@ -884,9 +1341,12 @@ namespace Seal.Model
                     source.MetaData.Enums.RemoveAll(i => !i.IsEditable);
                 }
                 XmlSerializer serializer = new XmlSerializer(typeof(Report));
-                StreamWriter sw = new StreamWriter(path);
-                serializer.Serialize(sw, this);
-                sw.Close();
+                XmlWriterSettings ws = new XmlWriterSettings();
+                ws.NewLineHandling = NewLineHandling.Entitize;
+                using (XmlWriter xw = XmlWriter.Create(path, ws))
+                {
+                    serializer.Serialize(xw, this);
+                }
             }
             finally
             {
@@ -902,6 +1362,11 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Add a default source to the report
+        /// </summary>
+        /// <param name="source"></param>
+        /// <returns></returns>
         public ReportSource AddSource(MetaSource source)
         {
             ReportSource result = ReportSource.Create(Repository, (source == null));
@@ -917,6 +1382,10 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Remove a report source from the report
+        /// </summary>
+        /// <param name="source"></param>
         public void RemoveSource(ReportSource source)
         {
             if (Sources.Count == 1) throw new Exception("The report must contain at least a Data Source");
@@ -929,11 +1398,19 @@ namespace Seal.Model
             Sources.Remove(source);
         }
 
-        public ReportModel AddModel()
+        /// <summary>
+        /// Add a default model to the report (either SQL or Standard)
+        /// </summary>
+        public ReportModel AddModel(bool sqlModel)
         {
             if (Sources.Count == 0) throw new Exception("Unable to create a model: No source available.\r\nPlease create a source first.");
             ReportModel result = ReportModel.Create();
-            result.Name = Helper.GetUniqueName("model", (from i in Models select i.Name).ToList());
+            result.Name = Helper.GetUniqueName("Model", (from i in Models select i.Name).ToList());
+            if (sqlModel)
+            {
+                result.Table = MetaTable.Create();
+                result.Table.DynamicColumns = true;
+            }
             ReportSource source = Sources.FirstOrDefault(i => i.IsDefault);
             if (source == null) source = Sources[0];
             result.SourceGUID = source.GUID;
@@ -953,6 +1430,10 @@ namespace Seal.Model
             return false;
         }
 
+        /// <summary>
+        /// Remove a report model from the report
+        /// </summary>
+        /// <param name="model"></param>
         public void RemoveModel(ReportModel model)
         {
             if (isModelUsedInViews(Views, model)) throw new Exception(string.Format("The model '{0}' is already used by a view.", model.Name));
@@ -961,13 +1442,16 @@ namespace Seal.Model
             Models.Remove(model);
         }
 
+        /// <summary>
+        /// Add a default output to the report
+        /// </summary>
         public ReportOutput AddOutput(OutputDevice device)
         {
             ReportOutput result = ReportOutput.Create();
             result.Name = Helper.GetUniqueName(string.Format("output ({0})", device.Name), (from i in Outputs select i.Name).ToList());
             if (device is OutputFolderDevice)
             {
-                result.FolderPath = string.IsNullOrEmpty(FilePath) ? Repository.SealRepositoryKeyword + "\\Reports\\" : Path.GetDirectoryName(FilePath).Replace(Repository.RepositoryPath, Repository.SealRepositoryKeyword);
+                result.FolderPath = string.IsNullOrEmpty(FilePath) ? Repository.SealRepositoryKeyword + string.Format("{0}Reports{0}", Path.DirectorySeparatorChar) : Path.GetDirectoryName(FilePath).Replace(Repository.RepositoryPath, Repository.SealRepositoryKeyword);
                 result.FileName = Repository.SealReportDisplayNameKeyword;
             }
 
@@ -979,6 +1463,9 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Remove an output from the report
+        /// </summary>
         public void RemoveOutput(ReportOutput output)
         {
             var schedules = Schedules.Where(i => i.OutputGUID == output.GUID).ToList();
@@ -990,6 +1477,9 @@ namespace Seal.Model
             Outputs.Remove(output);
         }
 
+        /// <summary>
+        /// Add a task to the report
+        /// </summary>
         public ReportTask AddTask()
         {
             ReportTask result = ReportTask.Create();
@@ -1003,19 +1493,31 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Remove a task from the report
+        /// </summary>
+        /// <param name="task"></param>
         public void RemoveTask(ReportTask task)
         {
             Tasks.Remove(task);
         }
 
+        /// <summary>
+        /// Add a model view to the report
+        /// </summary>
+        /// <returns></returns>
         public ReportView AddModelHTMLView()
         {
             return AddView(ReportViewTemplate.ModelName);
         }
 
+        /// <summary>
+        /// Add a root report view to the report
+        /// </summary>
+        /// <returns></returns>
         public ReportView AddRootView()
         {
-            ReportViewTemplate reportTemplate = RepositoryServer.GetViewTemplate("Report");
+            ReportViewTemplate reportTemplate = RepositoryServer.GetViewTemplate(ReportViewTemplate.ReportName);
             ReportView view = null;
             if (reportTemplate != null)
             {
@@ -1028,10 +1530,13 @@ namespace Seal.Model
             return view;
         }
 
-        public ReportView AddView(string name)
+        /// <summary>
+        /// Add a view with a template name
+        /// </summary>
+        public ReportView AddView(string templateName)
         {
             ReportView view = null;
-            ReportViewTemplate modelTemplate = RepositoryServer.GetViewTemplate(name);
+            ReportViewTemplate modelTemplate = RepositoryServer.GetViewTemplate(templateName);
             if (modelTemplate != null)
             {
                 view = AddRootView();
@@ -1046,11 +1551,17 @@ namespace Seal.Model
             return view;
         }
 
+        /// <summary>
+        /// From a parent view, add a child view with a template name
+        /// </summary>
         public ReportView AddChildView(ReportView parent, string templateName)
         {
             return AddChildView(parent, RepositoryServer.GetViewTemplate(templateName));
         }
 
+        /// <summary>
+        /// From a parent view, add a child view with a template
+        /// </summary>
         public ReportView AddChildView(ReportView parent, ReportViewTemplate template)
         {
             if (Models.Count == 0) throw new Exception("Unable to create a view: No model available.\r\nPlease create a model first.");
@@ -1078,13 +1589,36 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Remove a view from its parent 
+        /// </summary>
         public void RemoveView(ReportView parent, ReportView view)
         {
+            foreach (var refView in FullViewList.Where(i => !string.IsNullOrEmpty(i.ReferenceViewGUID)))
+            {
+                var v1 = FindView(view.Views, refView.GUID);
+                if (v1 == null)
+                {
+                    //This view has a reference and is not part of the children of the deleted view
+                    var v2 = FindView(view.Views, refView.ReferenceViewGUID);
+                    if (v2 != null)
+                    {
+                        throw new Exception(string.Format("Unable to remove the view '{0}': This view or one of its children named '{2}' is referenced by the view '{1}'.", view.Name, refView.Name, v2.Name));
+                    }
+                }
+            }
+
             if (parent == null)
             {
+                //Delete a root view
                 foreach (ReportOutput output in Outputs)
                 {
                     if (output.ViewGUID == view.GUID) throw new Exception(string.Format("Unable to remove the view '{0}': This view is used by the output '{1}'.", view.Name, output.Name));
+                }
+
+                foreach (var refView in FullViewList)
+                {
+                    if (refView.WidgetDefinition.ExecViewGUID == view.GUID) throw new Exception(string.Format("Unable to remove the view '{0}': This view is referenced by the Widget in the view '{1}'.", view.Name, refView.Name));
                 }
 
                 if (Views.Count == 1) throw new Exception("Unable to remove the view: The report must contain at least one View.");
@@ -1092,9 +1626,15 @@ namespace Seal.Model
                 //Change the default view if necessary
                 if (view.GUID == ViewGUID) ViewGUID = Views[0].GUID;
             }
-            else parent.Views.Remove(view);
+            else
+            {
+                parent.Views.Remove(view);
+            }
         }
 
+        /// <summary>
+        /// Add a schedule to the report
+        /// </summary>
         public ReportSchedule AddSchedule(ReportOutput output)
         {
             ReportSchedule result = ReportSchedule.Create();
@@ -1107,6 +1647,9 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Remove a schedule from the report
+        /// </summary>
         public void RemoveSchedule(ReportSchedule schedule)
         {
             Schedules.Remove(schedule);
@@ -1114,7 +1657,11 @@ namespace Seal.Model
             //Do not sync taks here, it will be done when report is really saved...
         }
 
-
+        /// <summary>
+        /// The image file name of the HTML result according to execution context 
+        /// </summary>
+        /// <param name="fileName"></param>
+        /// <returns></returns>
         public string GetImageFile(string fileName)
         {
             if (ExecutionContext == ReportExecutionContext.WebReport || ExecutionContext == ReportExecutionContext.WebOutput)
@@ -1123,9 +1670,12 @@ namespace Seal.Model
             }
 
             string result = Path.Combine(Repository.ViewImagesFolder, fileName);
-            return "file:///" + result.Replace("\\", "/");
+            return "file:///" + result.Replace(Path.DirectorySeparatorChar.ToString(), "/");
         }
 
+        /// <summary>
+        /// The image file name or source of the HTML result according to execution context 
+        /// </summary>
         public string AttachImageFile(string fileName)
         {
             if (ExecutionContext == ReportExecutionContext.WebReport)
@@ -1142,10 +1692,35 @@ namespace Seal.Model
             //generating result file
             return Helper.HtmlMakeImageSrcData(Path.Combine(Repository.ViewImagesFolder, fileName));
         }
+        string GetAttachedFileContent(string fileName)
+        {
+            string result = File.ReadAllText(fileName);
+            foreach (var item in Repository.Configuration.FileReplacePatterns.Where(i => i.FileName == Path.GetFileName(fileName)))
+            {
+                result = result.Replace(item.OldValue, item.NewValue);
+            }
+            return result;
+        }
 
+        /// <summary>
+        /// For Script Files, insert the attached file names or their contents according to execution context 
+        /// </summary>
+        public string AttachScriptFiles(string fileNames)
+        {
+            string result = "";
+            foreach (var fileName in Helper.GetStringList(fileNames))
+            {
+                if (!string.IsNullOrEmpty(fileName)) result += AttachScriptFile(fileName) + "\r\n";
+            }
+            return result;
+        }
 
+        /// <summary>
+        /// For a Script File, insert the attached script file name or it content according to execution context 
+        /// </summary>
         public string AttachScriptFile(string fileName, string cdnPath = "")
         {
+            fileName = FileHelper.ConvertOSFilePath(fileName);
             string sourceFilePath = Path.Combine(Repository.ViewScriptsFolder, fileName);
             if (!File.Exists(sourceFilePath)) return "";
 
@@ -1168,13 +1743,30 @@ namespace Seal.Model
             //generating result file, set the script directly in the result
             string result = "<script type='text/javascript'>\r\n";
 
-            result += File.ReadAllText(sourceFilePath);
+            result += GetAttachedFileContent(sourceFilePath);
             result += "\r\n</script>\r\n";
             return result;
         }
 
+        /// <summary>
+        /// For CSS Files, insert the attached file names or their contents according to execution context 
+        /// </summary>
+        public string AttachCSSFiles(string fileNames)
+        {
+            string result = "";
+            foreach (var fileName in Helper.GetStringList(fileNames))
+            {
+                if (!string.IsNullOrEmpty(fileName)) result += AttachCSSFile(fileName) + "\r\n";
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// For a CSS File, insert the attached file name or its content according to execution context 
+        /// </summary>
         public string AttachCSSFile(string fileName, string cdnPath = "")
         {
+            fileName = FileHelper.ConvertOSFilePath(fileName);
             string sourceFilePath = Path.Combine(Repository.ViewContentFolder, fileName);
             if (!File.Exists(sourceFilePath)) return "";
 
@@ -1196,12 +1788,16 @@ namespace Seal.Model
 
             //generating result file, set the CSS directly in the result
             string result = "<style type='text/css'>\r\n";
-            result += File.ReadAllText(sourceFilePath);
+            result += GetAttachedFileContent(sourceFilePath);
             result += "\r\n</style>\r\n";
             return result;
         }
 
+
         private List<ReportRestriction> _executionCommonRestrictions = null;
+        /// <summary>
+        /// List of common restrictions prompted at execution
+        /// </summary>
         [XmlIgnore]
         public List<ReportRestriction> ExecutionCommonRestrictions
         {
@@ -1212,16 +1808,16 @@ namespace Seal.Model
 
                     int index = 0;
                     _executionCommonRestrictions = new List<ReportRestriction>();
-                    foreach (ReportModel model in ExecutionModels)
+                    foreach (ReportRestriction restriction in AllExecutionRestrictions.Where(i => i.Prompt != PromptType.None).OrderBy(i => i.DisplayOrder))
                     {
-                        foreach (ReportRestriction restriction in AllExecutionRestrictions.Where(i => i.Prompt != PromptType.None))
+                        if (
+                            restriction.IsInputValue ||
+                            !_executionCommonRestrictions.Exists(i => (i.IsCommonRestrictionValue && i.Name == restriction.Name) || (!i.IsCommonRestrictionValue && i.MetaColumnGUID == restriction.MetaColumnGUID && i.DisplayNameEl == restriction.DisplayNameEl))
+                            )
                         {
-                            if (!_executionCommonRestrictions.Exists(i => i.MetaColumnGUID == restriction.MetaColumnGUID && i.DisplayNameEl == restriction.DisplayNameEl))
-                            {
-                                restriction.HtmlIndex = index.ToString();
-                                _executionCommonRestrictions.Add(restriction);
-                                index++;
-                            }
+                            restriction.HtmlIndex = index.ToString();
+                            _executionCommonRestrictions.Add(restriction);
+                            index++;
                         }
                     }
 
@@ -1230,8 +1826,7 @@ namespace Seal.Model
                     {
                         foreach (ReportRestriction restriction in _executionCommonRestrictions)
                         {
-
-                            ReportRestriction modelRestriction = model.Restrictions.FirstOrDefault(i => i.MetaColumnGUID == restriction.MetaColumnGUID && i.DisplayNameEl == restriction.DisplayNameEl);
+                            ReportRestriction modelRestriction = model.Restrictions.Union(model.AggregateRestrictions).Union(model.CommonRestrictions).FirstOrDefault(i => (i.IsCommonRestrictionValue && i.Name == restriction.Name) || (!i.IsCommonRestrictionValue && i.MetaColumnGUID == restriction.MetaColumnGUID && i.DisplayNameEl == restriction.DisplayNameEl));
                             if (modelRestriction != null) modelRestriction.HtmlIndex = restriction.HtmlIndex;
                         }
                     }
@@ -1244,64 +1839,98 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// List of all restrictions of all models of the report, plus the input values
+        /// </summary>
         [XmlIgnore]
         public List<ReportRestriction> AllRestrictions
         {
             get
             {
                 List<ReportRestriction> result = new List<ReportRestriction>();
+                result.AddRange(InputValues);
                 foreach (ReportModel model in Models)
                 {
-                    foreach (ReportRestriction restriction in model.Restrictions) result.Add(restriction);
-                    foreach (ReportRestriction restriction in model.AggregateRestrictions) result.Add(restriction);
+                    result.AddRange(model.Restrictions.Union(model.AggregateRestrictions).Union(model.CommonRestrictions));
                 }
                 return result;
             }
         }
 
+        /// <summary>
+        /// List of all restrictions involved in the execution
+        /// </summary>
         [XmlIgnore]
         public List<ReportRestriction> AllExecutionRestrictions
         {
             get
             {
                 List<ReportRestriction> result = new List<ReportRestriction>();
+                result.AddRange(ExecutionInputValues);
                 foreach (ReportModel model in ExecutionModels)
                 {
-                    foreach (ReportRestriction restriction in model.ExecutionRestrictions) result.Add(restriction);
-                    foreach (ReportRestriction restriction in model.ExecutionAggregateRestrictions) result.Add(restriction);
+                    result.AddRange(model.ExecutionRestrictions.Union(model.ExecutionAggregateRestrictions).Union(model.ExecutionCommonRestrictions));
                 }
                 return result;
             }
         }
 
-
-        void GetModelsToExecute(ReportView view, List<ReportModel> result)
+        /// <summary>
+        /// For a given view, fill the list of models to execute
+        /// </summary>
+        public void GetModelsToExecute(ReportView view, List<ReportModel> result)
         {
             if (view.Model != null && view.Model.Elements.Count > 0 && !result.Contains(view.Model)) result.Add(view.Model);
             foreach (var child in view.Views) GetModelsToExecute(child, result);
         }
 
+        /// <summary>
+        /// Current view used when parsing
+        /// </summary>
+        [XmlIgnore]
+        public ReportView CurrentView;
 
+        /// <summary>
+        /// Current model view used when parsing
+        /// </summary>
         [XmlIgnore]
-        public ReportView CurrentView; //Current view used when parsing
-        [XmlIgnore]
-        public ReportView CurrentModelView; //Current model view used when parsing
-        [XmlIgnore]
-        public ResultPage CurrentPage; //Current result page used when parsing
+        public ReportView CurrentModelView;
 
-        //Translations
+        /// <summary>
+        /// Current page used when parsing
+        /// </summary>
+        [XmlIgnore]
+        public ResultPage CurrentPage;
+
+        /// <summary>
+        /// Translate a reference text from the Report context
+        /// </summary>
         public string Translate(string reference)
         {
             if (ExecutionView == null) return reference;
             return Repository.Translate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, "Report", reference);
         }
 
+        /// <summary>
+        /// Translate in a JavaScript format a reference text from the Report context 
+        /// </summary>
+        public string TranslateToJS(string reference)
+        {
+            return Helper.ToJS(Translate(reference));
+        }
+
+        /// <summary>
+        /// Translate a reference text from a given context
+        /// </summary>
         public string ContextTranslate(string context, string reference)
         {
             if (ExecutionView == null) return reference;
             return Repository.Translate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, context, reference);
         }
 
+        /// <summary>
+        /// Translate a reference text from the Report context with args parameter
+        /// </summary>
         public string Translate(string reference, params object[] args)
         {
             try
@@ -1314,6 +1943,9 @@ namespace Seal.Model
             };
         }
 
+        /// <summary>
+        /// Translate a date keyword
+        /// </summary>
         public string TranslateDateKeywords(string value)
         {
             string result = value;
@@ -1324,6 +1956,9 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Translate a date keyword in english
+        /// </summary>
         public string TranslateDateKeywordsToEnglish(string value)
         {
             string result = value;
@@ -1334,6 +1969,9 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// List of date keywords in english
+        /// </summary>
         [XmlIgnore]
         public string DateKeywordsList
         {
@@ -1348,12 +1986,18 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Current culture of the execution
+        /// </summary>
         [XmlIgnore]
         public CultureInfo CultureInfo
         {
             get { return ExecutionView.CultureInfo; }
         }
 
+        /// <summary>
+        /// True if the report result has an external viewer (for PDF, CSV or Excel)
+        /// </summary>
         [XmlIgnore]
         public bool HasExternalViewer
         {
@@ -1363,7 +2007,9 @@ namespace Seal.Model
             }
         }
 
-
+        /// <summary>
+        /// True if the drill navigation is enabled
+        /// </summary>
         [XmlIgnore]
         public bool IsDrillEnabled
         {
@@ -1373,6 +2019,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if the sub-reports navigation is enabled
+        /// </summary>
         [XmlIgnore]
         public bool IsSubReportsEnabled
         {
@@ -1382,6 +2031,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if the server pagination for DataTables is enabled
+        /// </summary>
         [XmlIgnore]
         public bool IsServerPaginationEnabled
         {
@@ -1391,29 +2043,41 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if a PDF conversion will be done after the HTML generation
+        /// </summary>
         [XmlIgnore]
         public bool PdfConversion = false;
 
+        /// <summary>
+        /// Report format
+        /// </summary>
         [XmlIgnore]
         public ReportFormat Format
         {
-            get { return (ReportFormat) Enum.Parse(typeof(ReportFormat), ExecutionView.GetValue(Parameter.ReportFormatParameter)); }
+            get { return (ReportFormat)Enum.Parse(typeof(ReportFormat), ExecutionView.GetValue(Parameter.ReportFormatParameter)); }
             set { ExecutionView.SetParameter(Parameter.ReportFormatParameter, value.ToString()); }
         }
 
+        /// <summary>
+        /// File extension of the result file
+        /// </summary>
         [XmlIgnore]
         public string ResultExtension
         {
-            get {
+            get
+            {
                 var format = Format;
                 if (format == ReportFormat.csv) return "csv";
                 if (format == ReportFormat.excel) return "xlsx";
-                if (format == ReportFormat.pdf) return "htm"; //converter to pdf 
-                return "htm";
+                if (format == ReportFormat.pdf) return "html"; //converter to pdf 
+                return "html";
             }
         }
 
-
+        /// <summary>
+        /// True if the print layout should be used for the HTML generation 
+        /// </summary>
         [XmlIgnore]
         //Indicates if we use the print layout
         public bool PrintLayout
@@ -1421,10 +2085,23 @@ namespace Seal.Model
             get { return Format == ReportFormat.print || Format == ReportFormat.pdf; }
         }
 
-
+        /// <summary>
+        /// List of drill parents at execution
+        /// </summary>
         [XmlIgnore]
         public List<string> DrillParents = new List<string>();
 
+
+        /// <summary>
+        /// List of links used for Script navigation
+        /// </summary>
+        [XmlIgnore]
+        public Dictionary<string, NavigationLink> NavigationLinks = new Dictionary<string, NavigationLink>();
+
+
+        /// <summary>
+        /// Helper to update a view parameter
+        /// </summary>
         public void UpdateViewParameter(string viewId, string parameterName, string parameterValue)
         {
             ReportView view = ExecutionView.GetView(viewId);
@@ -1438,9 +2115,15 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Object that can be used at run-time for any purpose
+        /// </summary>
         [XmlIgnore]
-        public Object Tag;
+        public object Tag;
 
+        /// <summary>
+        /// Helper to find a view from its identifier
+        /// </summary>
         public ReportView FindView(List<ReportView> views, string guid)
         {
             ReportView result = null;
@@ -1458,6 +2141,134 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Helper to find a view from its name
+        /// </summary>
+        public ReportView FindViewFromName(List<ReportView> views, string name)
+        {
+            ReportView result = null;
+            foreach (var view in views)
+            {
+                if (view.Name == name)
+                {
+                    result = view;
+                    break;
+                }
+                result = FindViewFromName(view.Views, name);
+
+                if (result != null) break;
+            }
+            return result;
+        }
+
+
+        void fillFullViewList(List<ReportView> views, List<ReportView> result)
+        {
+            foreach (var view in views)
+            {
+                result.Add(view);
+                fillFullViewList(view.Views, result);
+            }
+        }
+
+        /// <summary>
+        /// Helper to list of all the views of the report
+        /// </summary>
+        [XmlIgnore]
+        public List<ReportView> FullViewList
+        {
+            get
+            {
+                var result = new List<ReportView>();
+                fillFullViewList(Views, result);
+                return result;
+            }
+        }
+        /// <summary>
+        /// Helper to get the root view from a child view
+        /// </summary>
+        public ReportView GetRootView(ReportView child)
+        {
+            ReportView result = null;
+            foreach (var view in Views)
+            {
+                if (FindView(view.Views, child.GUID) == child)
+                {
+                    result = view;
+                    break;
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Helper to get the a view from its execution id
+        /// </summary>
+        public ReportView GetViewFromExecId(string viewId)
+        {
+            ReportView result = null;
+            foreach (var view in Views)
+            {
+                result = view.GetView(viewId);
+                if (result != null) break;
+            }
+            return result;
+        }
+
+
+        /// <summary>
+        /// Get the widget view from the widgetGUID
+        /// </summary>
+        public void GetWidgetViewToParse(List<ReportView> views, string widgetGUID, ref ReportView widgetView, ref ReportView modelView)
+        {
+            foreach (var view in views)
+            {
+                if (view.WidgetDefinition.GUID == widgetGUID)
+                {
+                    widgetView = view;
+
+                    var lastView = widgetView;
+                    while (lastView.ParentView != null)
+                    {
+                        if (lastView.ParentView.Model != null)
+                        {
+                            modelView = lastView.ParentView;
+                            break;
+                        }
+                        else lastView = lastView.ParentView;
+                    }
+                }
+                if (widgetView != null) break;
+
+                GetWidgetViewToParse(view.Views, widgetGUID, ref widgetView, ref modelView);
+            }
+        }
+
+        /// <summary>
+        /// List of widget views of the report
+        /// </summary>
+        public List<ReportView> GetWidgetViews()
+        {
+            List<ReportView> result = new List<ReportView>();
+            foreach (var view in Views.OrderBy(i => i.SortOrder))
+            {
+                getWidgetViews(result, view);
+            }
+            return result;
+        }
+
+        void getWidgetViews(List<ReportView> widgetViews, ReportView view)
+        {
+            if (view.WidgetDefinition.IsPublished) widgetViews.Add(view);
+            foreach (var subview in view.Views.OrderBy(i => i.SortOrder))
+            {
+                getWidgetViews(widgetViews, subview);
+            }
+        }
+
+        /// <summary>
+        /// Helper to find a view from its template name
+        /// </summary>
         public ReportView FindViewFromTemplate(List<ReportView> views, string templateName)
         {
             ReportView result = null;
@@ -1476,6 +2287,9 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Cancel the report execution
+        /// </summary>
         public void CancelExecution()
         {
             int cnt = 30;
@@ -1486,13 +2300,23 @@ namespace Seal.Model
             }
         }
 
-        //Log Interface implementation
+        /// <summary>
+        /// Log Interface implementation
+        /// </summary>
         public void LogMessage(string message, params object[] args)
         {
             try
             {
-                //string are supposed to be thread-safe...
-                ExecutionMessages += string.Format("{0} {1}\r\n", DateTime.Now.ToLongTimeString(), string.Format(message, args));
+                if (string.IsNullOrWhiteSpace(message.Trim()) && args.Length == 0)
+                {
+                    Debug.WriteLine(message);
+                    ExecutionMessages += message;
+                }
+                else
+                {
+                    Debug.WriteLine(string.Format("{0} {1}\r\n", DateTime.Now.ToLongTimeString(), string.Format(message, args)));
+                    ExecutionMessages += string.Format("{0} {1}\r\n", DateTime.Now.ToLongTimeString(), string.Format(message, args));
+                }
             }
             catch (Exception ex)
             {
@@ -1500,14 +2324,20 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Helper to get a report source from its name
+        /// </summary>
         public ReportSource GetReportSource(string sourceName)
         {
-            return _sources.FirstOrDefault(i => i.Name == sourceName);
+            return Sources.FirstOrDefault(i => i.Name == sourceName);
         }
 
+        /// <summary>
+        /// Helper to get a report model from its name
+        /// </summary>
         public ReportModel GetReportModel(string modelName)
         {
-            return _models.FirstOrDefault(i => i.Name == modelName);
+            return Models.FirstOrDefault(i => i.Name == modelName);
         }
 
         #region Translation Helpers
@@ -1516,36 +2346,65 @@ namespace Seal.Model
         {
             get
             {
-                return FilePath.Replace(Repository.ReportsFolder, "").Replace(Repository.SubReportsFolder, string.Format("\\..\\{0}", Path.GetFileNameWithoutExtension(Repository.SubReportsFolder)));
+                return FilePath.Replace(Repository.ReportsFolder, "").Replace(Repository.SubReportsFolder, string.Format("{1}..{1}{0}", Path.GetFileNameWithoutExtension(Repository.SubReportsFolder), Path.DirectorySeparatorChar));
             }
         }
 
+
         //Helpers for translations
+
+        /// <summary>
+        /// Repository Translate using the ReportViewName context
+        /// </summary>
+        public string TranslateRepository(string context, string instance, string reference)
+        {
+            return Repository.RepositoryTranslate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, context, instance, reference);
+        }
+
+        /// <summary>
+        /// Translate using the ReportDisplayName context
+        /// </summary>
         public string TranslateDisplayName(string displayName)
         {
             return Repository.RepositoryTranslate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, "ReportDisplayName", TranslationFilePath, displayName);
         }
 
+        /// <summary>
+        /// Translate using the ReportViewName context
+        /// </summary>
         public string TranslateViewName(string viewName)
         {
             return Repository.RepositoryTranslate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, "ReportViewName", TranslationFilePath, viewName);
         }
 
+        /// <summary>
+        /// Translate using the ReportOutputName context
+        /// </summary>
         public string TranslateOutputName(string outputName)
         {
             return Repository.RepositoryTranslate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, "ReportOutputName", TranslationFilePath, outputName);
         }
 
+        /// <summary>
+        /// Translate using the ReportGeneral context
+        /// </summary>
         public string TranslateGeneral(string reference)
         {
             return Repository.RepositoryTranslate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, "ReportGeneral", TranslationFilePath, reference);
         }
 
+        /// <summary>
+        /// Translate using the Element context
+        /// </summary>
         public string TranslateElement(ReportElement element, string reference)
         {
+            if (string.IsNullOrEmpty(element.MetaColumnGUID)) return Repository.RepositoryTranslate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, "Element", element.DisplayNameEl, reference);
             return Repository.RepositoryTranslate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, "Element", element.MetaColumn.Category + '.' + element.DisplayNameEl, reference);
         }
 
+        /// <summary>
+        /// Translate the enum using the Enum context
+        /// </summary>
         public string EnumDisplayValue(MetaEnum instance, string id, bool forRestriction = false)
         {
             string result = instance.GetDisplayValue(id, forRestriction);
@@ -1553,11 +2412,22 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Translate the enum message using the EnumMessage context
+        /// </summary>
+        public string EnumMessage(MetaEnum instance)
+        {
+            if (!instance.HasFilters && !instance.HasDependencies) return "";
+            return Repository.RepositoryTranslate(ExecutionView.CultureInfo.TwoLetterISOLanguageName, "EnumMessage", instance.Name, instance.Message);
+        }
         #endregion
 
         #region Log
 
         static bool PurgeIsDone = false;
+        /// <summary>
+        /// Log the report execution in the Log repository folder
+        /// </summary>
         public void LogExecution()
         {
             try
@@ -1568,7 +2438,8 @@ namespace Seal.Model
 
                 string logFileName = Path.Combine(Repository.LogsFolder, string.Format("log_{0:yyyy_MM_dd}.txt", DateTime.Now));
                 var message = ExecutionMessages;
-                if (!string.IsNullOrEmpty(ExecutionErrorStackTrace)) message += string.Format("\r\nError Stack Trace:\r\n{0}\r\n", ExecutionErrorStackTrace);
+                if (!string.IsNullOrEmpty(ExecutionErrors)) message += string.Format("\r\nError Message:\r\n{0}\r\n", ExecutionErrors);
+                if (!Cancel && !string.IsNullOrEmpty(ExecutionErrorStackTrace)) message += string.Format("\r\nError Stack Trace:\r\n{0}\r\n", ExecutionErrorStackTrace);
                 string log = string.Format("********************\r\nExecution of '{0}' on {1} {2}\r\n{3}********************\r\n", FilePath, DateTime.Now.ToShortDateString(), DateTime.Now.ToShortTimeString(), message);
                 File.AppendAllText(logFileName, log);
 

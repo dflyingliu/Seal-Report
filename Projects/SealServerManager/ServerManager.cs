@@ -1,22 +1,16 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using Seal.Model;
 using System.IO;
 using Seal.Helpers;
-using Seal.Converter;
 using Seal.Forms;
 using System.Diagnostics;
-using System.Threading;
 
 namespace Seal
 {
@@ -80,14 +74,17 @@ namespace Seal
 
             configureMenuItem.Click += configureClick;
             configurationToolStripMenuItem.DropDownItems.Add(configureMenuItem);
+            configureMenuItem.ShortcutKeys = (Keys.Control | Keys.C);
 
             configurationToolStripMenuItem.DropDownItems.Add(new ToolStripSeparator());
             publishWebMenuItem.Click += configureClick;
             configurationToolStripMenuItem.DropDownItems.Add(publishWebMenuItem);
+            publishWebMenuItem.ShortcutKeys = (Keys.Control | Keys.P);
 
             configurationToolStripMenuItem.DropDownItems.Add(new ToolStripSeparator());
             securityMenuItem.Click += securityClick;
             configurationToolStripMenuItem.DropDownItems.Add(securityMenuItem);
+            securityMenuItem.ShortcutKeys = (Keys.Control | Keys.W);
 
             ShowIcon = true;
             Icon = Properties.Resources.serverManager;
@@ -201,6 +198,10 @@ namespace Seal
         }
 
         public void EditSchedule(ReportSchedule schedule)
+        {
+        }
+
+        public void RefreshModelTreeView()
         {
         }
 

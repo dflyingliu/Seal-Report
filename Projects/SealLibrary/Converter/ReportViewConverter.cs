@@ -1,20 +1,37 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.ComponentModel;
 using Seal.Model;
 using System.Globalization;
-using Seal.Helpers;
+using System.Collections.Generic;
+using Seal.Forms;
 
-namespace Seal.Converter
+namespace Seal.Forms
 {
     public class ReportViewConverter : StringConverter
     {
+        Report getReport(ITypeDescriptorContext context)
+        {
+            Report report = context.Instance as Report;
+            if (report == null && context.Instance is ReportComponent) report = ((ReportComponent)context.Instance).Report;
+            if (report == null && TemplateTextEditor.CurrentEntity is Report) report = (Report)TemplateTextEditor.CurrentEntity;
+
+            return report;
+        }
+
+        List<ReportView> getViewList(PropertyDescriptor descriptor, Report report)
+        {
+
+            List<ReportView> result = null;
+            if (descriptor.Name == "ReferenceViewGUID") result = report.FullViewList;
+            else result = report.Views;
+            return result;
+        }
+
         public override bool GetStandardValuesSupported(ITypeDescriptorContext context)
         {
             return true; //true means show a combobox
@@ -26,14 +43,19 @@ namespace Seal.Converter
 
         public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext context)
         {
-            string[] choices = new string[] { "No View" };
-            ReportComponent component = context.Instance as ReportComponent;
-            if (component != null)
+            List<string> choices = new List<string>();
+            Report report = getReport(context);
+            if (report != null)
             {
-                choices = (from s in component.Report.Views select s.Name).ToArray();
+                var list = getViewList(context.PropertyDescriptor, report);
+                choices = (from s in list select s.Name).ToList();
+                if (context.PropertyDescriptor.Name == "ReferenceViewGUID" || context.PropertyDescriptor.Name == "ExecViewGUID")
+                {
+                    choices.Insert(0, "");
+                }
             }
 
-            return new StandardValuesCollection(choices);
+            return new StandardValuesCollection(choices.OrderBy(i => i).ToList());
         }
 
         public override bool CanConvertTo(ITypeDescriptorContext context, Type destType)
@@ -45,10 +67,11 @@ namespace Seal.Converter
         {
             if (context != null)
             {
-                ReportComponent component = context.Instance as ReportComponent;
-                if (component != null && value != null)
+                Report report = getReport(context);
+                if (report != null && value != null)
                 {
-                    ReportView view = component.Report.Views.FirstOrDefault(i => i.GUID == value.ToString());
+                    var list = getViewList(context.PropertyDescriptor, report);
+                    ReportView view = list.FirstOrDefault(i => i.GUID == value.ToString());
                     if (view != null) return view.Name;
                 }
             }
@@ -62,10 +85,11 @@ namespace Seal.Converter
 
         public override object ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value)
         {
-            ReportComponent component = context.Instance as ReportComponent;
-            if (component != null && value != null)
+            Report report = getReport(context);
+            if (report != null && value != null)
             {
-                ReportView view = component.Report.Views.FirstOrDefault(i => i.Name == value.ToString());
+                var list = getViewList(context.PropertyDescriptor, report);
+                ReportView view = list.FirstOrDefault(i => i.Name == value.ToString());
                 if (view != null) return view.GUID;
             }
             return base.ConvertFrom(context, culture, value);

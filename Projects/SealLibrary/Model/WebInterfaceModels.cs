@@ -1,23 +1,31 @@
-﻿using Microsoft.Win32.TaskScheduler;
-using Seal.Helpers;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
 using System.IO;
-using System.Linq;
-using System.Web;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
     public class SWIUserProfile
     {
-        public bool authenticated = false;
         public string name;
         public string group;
         public string culture;
         public string folder;
+        public string dashboard;
+        public string lastview;
+        public ViewType viewtype;
+        public SWIDashboardFolder[] dashboardfolders;
+        public bool managedashboards = false;
+        public string usertag;
     }
 
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
     public class SWIFolder
     {
         private static string PersonalPrefix = ":";
@@ -26,6 +34,7 @@ namespace Seal.Model
         public string name;
         public string fullname;
         public int right = 0;
+        public bool sql = false; //can edit sql model
         public bool expand = true;
         public bool files = false; //true = files only = no reports
         public int manage = 0; //0 do not manage, 1 manage sub-folders only, 2 manage all :create, delete and rename
@@ -34,7 +43,7 @@ namespace Seal.Model
         public void SetManageFlag(bool useSubFolders, bool manageFolder, bool isDefined)
         {
             if (!useSubFolders) manage = 0;
-            //the folder in defined in the security = no rename or delete
+            //the folder is defined in the security = no rename or delete
             else manage = !manageFolder ? 0 : (isDefined ? 1 : 2);
         }
 
@@ -43,7 +52,7 @@ namespace Seal.Model
             get { return path.StartsWith(PersonalPrefix); }
         }
 
-        public string Path
+        public string FinalPath
         {
             get { return path.StartsWith(PersonalPrefix) ? path.Substring(1) : path; }
         }
@@ -61,7 +70,7 @@ namespace Seal.Model
 
         public string Combine(string newName)
         {
-            return path + (path.EndsWith("\\") ? "" : "\\") + System.IO.Path.GetFileName(newName);
+            return path + (path.EndsWith(Path.DirectorySeparatorChar.ToString()) ? "" : Path.DirectorySeparatorChar.ToString()) + System.IO.Path.GetFileName(newName);
         }
 
         //Physical path
@@ -76,41 +85,71 @@ namespace Seal.Model
         }
     }
 
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
+    public class SWIDashboardFolder
+    {
+        public static string PersonalPath = ":";
+
+        public string name;
+        public string path;
+    }
+
+
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
     public class SWIFile
     {
         public string path;
         public string name;
         public string last;
-        public bool isReport;
+        public bool isreport;
         public int right;
     }
 
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
     public class SWIFolderDetail
     {
         public SWIFolder folder = null;
         public SWIFile[] files = null;
     }
 
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
     public class SWIView
     {
         public string guid;
         public string name;
-        public string displayName;
+        public string displayname;
     }
 
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
     public class SWIOutput
     {
         public string guid;
         public string name;
-        public string displayName;
+        public string displayname;
     }
 
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
     public class SWIReportDetail
     {
         public SWIView[] views;
         public SWIOutput[] outputs;
     }
 
+    /// <summary>
+    /// Class used for the Seal Web Interface: Communication from the Browser to the Web Report Server
+    /// </summary>
     public class SWIItem
     {
         public string id;

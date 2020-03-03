@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -10,19 +10,19 @@ using System.IO;
 using System.Xml.Serialization;
 using Seal.Helpers;
 using System.ComponentModel;
-using Seal.Converter;
 using Seal.Forms;
 using System.Drawing.Design;
 using DynamicTypeDescriptor;
 using RazorEngine.Templating;
-using System.Drawing;
 using System.Globalization;
 using System.Web;
 using System.Data;
 
 namespace Seal.Model
 {
-
+    /// <summary>
+    /// A ReportView defines how a ReportModel is rendered.
+    /// </summary>
     public class ReportView : ReportComponent, ITreeSort
     {
         #region Editor
@@ -35,21 +35,27 @@ namespace Seal.Model
                 foreach (var property in Properties) property.SetIsBrowsable(false);
                 //Then enable
                 GetProperty("ModelGUID").SetIsBrowsable(Template.ForReportModel);
+                GetProperty("ReferenceViewGUID").SetIsBrowsable(true);
                 GetProperty("TemplateName").SetIsBrowsable(true);
+                GetProperty("TemplateDescription").SetIsBrowsable(true);
 
                 //Set culture only on master view
                 GetProperty("CultureName").SetIsBrowsable(IsRootView);
                 GetProperty("UseCustomTemplate").SetIsBrowsable(true);
                 GetProperty("CustomTemplate").SetIsBrowsable(true);
                 GetProperty("PartialTemplates").SetIsBrowsable(PartialTemplates.Count > 0);
+                GetProperty("PartialTemplatesConfiguration").SetIsBrowsable(PartialTemplates.Count(i => i.UseCustom) > 0);
 
                 GetProperty("TemplateConfiguration").SetIsBrowsable(Parameters.Count > 0);
+
+
                 GetProperty("PdfConverter").SetIsBrowsable(Template.Name == ReportViewTemplate.ReportName);
                 PdfConverter.InitEditor();
 
                 GetProperty("ExcelConverter").SetIsBrowsable(true);
                 ExcelConverter.InitEditor();
 
+                GetProperty("WidgetDefinition").SetIsBrowsable(Template.Name != ReportViewTemplate.ReportName); //No widget from the root view...
                 GetProperty("WebExec").SetIsBrowsable(Template.Name == ReportViewTemplate.ReportName);
 
                 //Read only
@@ -59,7 +65,7 @@ namespace Seal.Model
                 //Helpers
                 GetProperty("HelperReloadConfiguration").SetIsBrowsable(true);
                 GetProperty("HelperResetParameters").SetIsBrowsable(true);
-                GetProperty("HelperResetPDFConfigurations").SetIsBrowsable(true);
+                GetProperty("HelperResetPDFConfigurations").SetIsBrowsable(Template.Name == ReportViewTemplate.ReportName);
                 GetProperty("HelperResetExcelConfigurations").SetIsBrowsable(true);
                 GetProperty("Information").SetIsBrowsable(true);
                 GetProperty("Error").SetIsBrowsable(true);
@@ -78,17 +84,26 @@ namespace Seal.Model
 
         #endregion
 
+        /// <summary>
+        /// Creates a basic view
+        /// </summary>
+        /// <param name="template"></param>
+        /// <returns></returns>
         public static ReportView Create(ReportViewTemplate template)
         {
             ReportView result = new ReportView() { GUID = Guid.NewGuid().ToString(), TemplateName = template.Name };
             return result;
         }
 
+        /// <summary>
+        /// Init all references
+        /// </summary>
         public void InitReferences()
         {
             AddDefaultModelViews();
             foreach (var childView in Views)
             {
+                childView.ParentView = this;
                 childView.Report = Report;
                 childView.InitReferences();
 
@@ -101,6 +116,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Init the view parameters from the configuration
+        /// </summary>
         public void InitParameters(List<Parameter> configParameters, List<Parameter> parameters, bool resetValues)
         {
             var initialParameters = parameters.ToList();
@@ -135,6 +153,9 @@ namespace Seal.Model
         //Temporary variables to help for report serialization...
         private List<Parameter> _tempParameters;
 
+        /// <summary>
+        /// Operations performed before the serialization
+        /// </summary>
         public void BeforeSerialization()
         {
             _tempParameters = Parameters.ToList();
@@ -142,11 +163,14 @@ namespace Seal.Model
             Parameters.RemoveAll(i => i.Value == null || i.Value == i.ConfigValue);
 
             //Remove empty custom template
-            _partialTemplates.RemoveAll(i => string.IsNullOrWhiteSpace(i.Text));
+            PartialTemplates.RemoveAll(i => string.IsNullOrWhiteSpace(i.Text));
 
             foreach (var view in Views) view.BeforeSerialization();
         }
 
+        /// <summary>
+        /// Operations performed after the serialization
+        /// </summary>
         public void AfterSerialization()
         {
             Parameters = _tempParameters;
@@ -155,24 +179,33 @@ namespace Seal.Model
             foreach (var view in Views) view.AfterSerialization();
         }
 
+        /// <summary>
+        /// Forces the reload of the configuration
+        /// </summary>
         public void ReloadConfiguration()
         {
             _template = null;
             var t = Template;
-            _information = "Configuration has been reloaded.";
+            Information = "Configuration has been reloaded.";
         }
 
+        /// <summary>
+        /// Init all parameters with an option to reset their values
+        /// </summary>
         public void InitParameters(bool resetValues)
         {
             if (Report == null || Template == null) return;
 
-            InitParameters(Template.Parameters, _parameters, resetValues);
-            _error = Template.Error;
-            _information = "";
-            if (resetValues) _information += "Values have been reset";
-            if (!string.IsNullOrEmpty(_information)) _information = Helper.FormatMessage(_information);
+            InitParameters(Template.Parameters, Parameters, resetValues);
+            Error = Template.Error;
+            Information = "";
+            if (resetValues) Information += "Values have been reset";
+            if (!string.IsNullOrEmpty(Information)) Information = Helper.FormatMessage(Information);
         }
 
+        /// <summary>
+        /// Add the default children for a model
+        /// </summary>
         public void AddDefaultModelViews()
         {
             if (TemplateName == ReportViewTemplate.ModelName && Views.Count == 0)
@@ -186,22 +219,49 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True, if the parameter has a value 
+        /// </summary>
         public bool HasValue(string name)
         {
             return !string.IsNullOrEmpty(GetValue(name));
         }
 
+        /// <summary>
+        /// Returns the parameter value
+        /// </summary>
         public string GetValue(string name)
         {
-            Parameter parameter = _parameters.FirstOrDefault(i => i.Name == name);
+            Parameter parameter = Parameters.FirstOrDefault(i => i.Name == name);
             return parameter == null ? "" : parameter.Value;
         }
 
+        /// <summary>
+        /// Returns the parameter value or the configuration value if it does not exist
+        /// </summary>
+        public string GetValueOrDefault(string name)
+        {
+            Parameter parameter = Parameters.FirstOrDefault(i => i.Name == name);
+            if (parameter != null)
+            {
+                if (string.IsNullOrEmpty(parameter.Value)) return parameter.ConfigValue;
+                else return parameter.Value;
+            }
+            return "";
+        }
+
+
+        /// <summary>
+        /// Helper to create an HTTP attribute from a parameter value
+        /// </summary>
         public string AddAttribute(string attrName, string paramName)
         {
             return Helper.AddAttribute(attrName, GetValue(paramName));
         }
 
+        /// <summary>
+        /// Current chart title
+        /// </summary>
         public string ChartTitle
         {
             get
@@ -216,6 +276,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Translates a mapped label having keywords %DisplayName%
+        /// </summary>
         public string GetTranslatedMappedLabel(string text)
         {
             string result = text;
@@ -245,6 +308,9 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Replace a pattern by a text in the parameter values
+        /// </summary>
         public void ReplaceInParameterValues(string paramName, string pattern, string text)
         {
             foreach (var param in Parameters.Where(i => i.Name == paramName && !string.IsNullOrEmpty(i.Value)))
@@ -258,52 +324,88 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Returns a Parameter
+        /// </summary>
         public Parameter GetParameter(string name)
         {
-            var result = _parameters.FirstOrDefault(i => i.Name == name);
+            var result = Parameters.FirstOrDefault(i => i.Name == name);
             return result;
         }
 
+        /// <summary>
+        /// Set a parameter value
+        /// </summary>
         public void SetParameter(string name, string value)
         {
-            var result = _parameters.FirstOrDefault(i => i.Name == name);
+            var result = Parameters.FirstOrDefault(i => i.Name == name);
             if (result != null) result.Value = value;
         }
 
+        /// <summary>
+        /// Set a parameter boolean value
+        /// </summary>
         public void SetParameter(string name, bool value)
         {
-            var result = _parameters.FirstOrDefault(i => i.Name == name);
+            var result = Parameters.FirstOrDefault(i => i.Name == name);
             if (result != null) result.BoolValue = value;
         }
 
+        /// <summary>
+        /// Returns a parameter value with HTML encoding
+        /// </summary>
         public string GetHtmlValue(string name)
         {
             return Helper.ToHtml(GetValue(name));
         }
 
+        /// <summary>
+        /// Returns a parameter boolean value
+        /// </summary>
         public bool GetBoolValue(string name)
         {
-            Parameter parameter = _parameters.FirstOrDefault(i => i.Name == name);
+            Parameter parameter = Parameters.FirstOrDefault(i => i.Name == name);
             return parameter == null ? false : parameter.BoolValue;
         }
 
+        /// <summary>
+        /// Returns a parameter boolean value for JavaScript
+        /// </summary>
+        public string GetBoolValueJS(string name)
+        {
+            Parameter parameter = Parameters.FirstOrDefault(i => i.Name == name);
+            return (parameter == null ? false : parameter.BoolValue).ToString().ToLower();
+        }
+
+        /// <summary>
+        /// Returns a parameter boolean value with a default if it does not exist
+        /// </summary>
         public bool GetBoolValue(string name, bool defaultValue)
         {
-            Parameter parameter = _parameters.FirstOrDefault(i => i.Name == name);
+            Parameter parameter = Parameters.FirstOrDefault(i => i.Name == name);
             return parameter == null ? defaultValue : parameter.BoolValue;
         }
 
+        /// <summary>
+        /// Returns a paramter ineteger value
+        /// </summary>
         public int GetNumericValue(string name)
         {
-            Parameter parameter = _parameters.FirstOrDefault(i => i.Name == name);
+            Parameter parameter = Parameters.FirstOrDefault(i => i.Name == name);
             return parameter == null ? 0 : parameter.NumericValue;
         }
 
+        /// <summary>
+        /// True if the view is the root view (no parent)
+        /// </summary>
         public bool IsRootView
         {
             get { return Template.ParentNames.Count == 0; }
         }
 
+        /// <summary>
+        /// True if the view is an ancestor of a givenen view
+        /// </summary>
         public bool IsAncestorOf(ReportView view)
         {
             bool result = false;
@@ -316,6 +418,9 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Current root view
+        /// </summary>
         public ReportView RootView
         {
             get
@@ -329,6 +434,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// View name translated
+        /// </summary>
         public string ViewName
         {
             get
@@ -339,6 +447,9 @@ namespace Seal.Model
         }
 
         string _templateName;
+        /// <summary>
+        /// The name of the view template. View templates are defined in the repository Views folder.
+        /// </summary>
         [DisplayName("Template name"), Description("The name of the view template. View templates are defined in the repository Views folder."), Category("Definition"), Id(1, 1)]
         public string TemplateName
         {
@@ -350,8 +461,24 @@ namespace Seal.Model
             set { _templateName = value; }
         }
 
+        /// <summary>
+        /// The description of the template
+        /// </summary>
+        [DisplayName("Template Description"), Description("The description of the template."), Category("Definition"), Id(2, 1)]
+        public string TemplateDescription
+        {
+            get
+            {
+                return Template != null ? Template.Description : "";
+            }
+        }
+
         string _modelGUID;
-        [DisplayName("Model"), Description("The data model used for the view."), Category("Definition"), Id(2, 1)]
+        /// <summary>
+        /// The data model identifier used for the view
+        /// </summary>
+        [DefaultValue(null)]
+        [DisplayName("Model"), Description("The data model used for the view."), Category("Definition"), Id(3, 1)]
         [TypeConverter(typeof(ReportModelConverter))]
         public string ModelGUID
         {
@@ -362,27 +489,42 @@ namespace Seal.Model
                 UpdateEditorAttributes();
             }
         }
+        public bool ShouldSerializeModelGUID() { return !string.IsNullOrEmpty(_modelGUID); }
+        /// <summary>
+        /// If set, the values of the properties of the view may be taken from the reference view. This apply to parameters having their default value (including Excel and PDF configuration), custom template texts with 'Use custom template text' set to 'false'. 
+        /// </summary>
+        [DefaultValue(null)]
+        [DisplayName("Reference View"), Description("If set, the values of the properties of the view may be taken from the reference view. This apply to parameters having their default value (including Excel and PDF configuration), custom template texts with 'Use custom template text' set to 'false'."), Category("Definition"), Id(4, 1)]
+        [TypeConverter(typeof(ReportViewConverter))]
+        public string ReferenceViewGUID { get; set; }
+        public bool ShouldSerializeReferenceViewGUID() { return !string.IsNullOrEmpty(ReferenceViewGUID); }
 
 
+        /// <summary>
+        /// Init the partial templates of the view
+        /// </summary>
         public void InitPartialTemplates()
         {
             //Init partial templates
             foreach (var partialPath in Template.PartialTemplatesPath)
             {
                 var partialName = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(partialPath));
-                var pt = _partialTemplates.FirstOrDefault(i => i.Name == partialName);
+                var pt = PartialTemplates.FirstOrDefault(i => i.Name == partialName);
                 if (pt == null)
                 {
                     pt = new ReportViewPartialTemplate() { Name = partialName, UseCustom = false, Text = "" };
-                    _partialTemplates.Add(pt);
+                    PartialTemplates.Add(pt);
                 }
                 pt.View = this;
             }
             //Remove unused
-            _partialTemplates.RemoveAll(i => !Template.PartialTemplatesPath.Exists(j => Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(j)) == i.Name));
+            PartialTemplates.RemoveAll(i => !Template.PartialTemplatesPath.Exists(j => Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(j)) == i.Name));
         }
 
         ReportViewTemplate _template = null;
+        /// <summary>
+        /// Current ReportViewTemplate
+        /// </summary>
         public ReportViewTemplate Template
         {
             get
@@ -393,11 +535,11 @@ namespace Seal.Model
                     if (_template == null)
                     {
                         _template = new ReportViewTemplate() { Name = TemplateName };
-                        _error = string.Format("Unable to find template named '{0}'. Check your repository Views folder.", TemplateName);
+                        Error = string.Format("Unable to find template named '{0}'. Check your repository Views folder.", TemplateName);
                     }
                     else
                     {
-                        _error = _template.Error;
+                        Error = _template.Error;
                     }
                     InitPartialTemplates();
                     InitParameters(false);
@@ -406,10 +548,17 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Children of the view
+        /// </summary>
         public List<ReportView> Views = new List<ReportView>();
+        public bool ShouldSerializeViews() { return Views.Count > 0; }
 
 
         bool _useCustomTemplate = false;
+        /// <summary>
+        /// If true, the template text can be modified
+        /// </summary>
         [DisplayName("Use custom template text"), Description("If true, the template text can be modified."), Category("Custom template texts"), Id(2, 3)]
         [DefaultValue(false)]
         public bool UseCustomTemplate
@@ -424,6 +573,9 @@ namespace Seal.Model
 
         DateTime _lastTemplateModification = DateTime.Now;
         string _customTemplate;
+        /// <summary>
+        /// The custom template text used instead of the template defined by the template name
+        /// </summary>
         [DisplayName("Custom template"), Description("The custom template text used instead of the template defined by the template name."), Category("Custom template texts"), Id(3, 3)]
         [Editor(typeof(TemplateTextEditor), typeof(UITypeEditor))]
         public string CustomTemplate
@@ -436,25 +588,44 @@ namespace Seal.Model
             }
         }
 
-        List<ReportViewPartialTemplate> _partialTemplates = new List<ReportViewPartialTemplate>();
-        [DisplayName("Custom Partial Templates"), Description("The custom partial template texts for the view."), Category("Custom template texts"), Id(4, 3)]
+        /// <summary>
+        /// The custom partial template list for the view
+        /// </summary>
+        [DisplayName("Custom partial templates list"), Description("The custom partial template list for the view."), Category("Custom template texts"), Id(4, 3)]
         [Editor(typeof(EntityCollectionEditor), typeof(UITypeEditor))]
-        public List<ReportViewPartialTemplate> PartialTemplates
-        {
-            get { return _partialTemplates; }
-            set { _partialTemplates = value; }
-        }
+        public List<ReportViewPartialTemplate> PartialTemplates { get; set; } = new List<ReportViewPartialTemplate>();
+        public bool ShouldSerializePartialTemplates() { return PartialTemplates.Count > 0; }
 
 
-        List<Parameter> _parameters = new List<Parameter>();
-        public List<Parameter> Parameters
+#if !NETCOREAPP
+        /// <summary>
+        /// The custom partial template texts for the view
+        /// </summary>
+        [TypeConverter(typeof(ExpandableObjectConverter))] 
+        [DisplayName("Custom partial template Texts"), Description("The custom partial template texts for the view."), Category("Custom template texts"), Id(5, 3)]
+        [XmlIgnore]
+        public PartialTemplatesEditor PartialTemplatesConfiguration
         {
-            get { return _parameters; }
-            set { _parameters = value; }
+            get
+            {
+                var editor = new PartialTemplatesEditor();
+                editor.Init(PartialTemplates.ToList());
+                return editor;
+            }
         }
+#endif
+
+        /// <summary>
+        /// The view parameters
+        /// </summary>
+        public List<Parameter> Parameters { get; set; } = new List<Parameter>();
+        public bool ShouldSerializeParameters() { return Parameters.Count > 0; }
 
 
         string _cultureName = "";
+        /// <summary>
+        /// The language and culture used to display the report. If empty, the default culture is used.
+        /// </summary>
         [DisplayName("Culture name"), Description("The language and culture used to display the report. If empty, the default culture is used."), Category("View parameters"), Id(2, 4)]
         [TypeConverter(typeof(CultureNameConverter))]
         public string CultureName
@@ -466,7 +637,12 @@ namespace Seal.Model
                 _cultureName = value;
             }
         }
+        public bool ShouldSerializeCultureName() { return !string.IsNullOrEmpty(_cultureName); }
 
+#if !NETCOREAPP
+        /// <summary>
+        /// The view configuration values for edition.
+        /// </summary>
         [TypeConverter(typeof(ExpandableObjectConverter))]
         [DisplayName("Template configuration"), Description("The view configuration values."), Category("View parameters"), Id(3, 4)]
         [XmlIgnore]
@@ -475,67 +651,108 @@ namespace Seal.Model
             get
             {
                 var editor = new ParametersEditor();
-                editor.Init(_parameters);
+                editor.Init(Parameters);
                 return editor;
             }
         }
+#endif
 
-
+        /// <summary>
+        /// Current sort order of the view
+        /// </summary>
+        /// <returns></returns>
         public int GetSort()
         {
-            return _sortOrder;
+            return SortOrder;
         }
 
-        int _sortOrder = 0;
-        public int SortOrder
-        {
-            get { return _sortOrder; }
-            set { _sortOrder = value; }
-        }
+        /// <summary>
+        /// Sort order of the view
+        /// </summary>
+        public int SortOrder { get; set; } = 0;
 
+        /// <summary>
+        /// Sort order with the view name
+        /// </summary>
         public string SortOrderFull
         {
-            get { return string.Format("{0:D5}_{1}", _sortOrder, Name); }
+            get { return string.Format("{0:D5}_{1}", SortOrder, Name); }
         }
 
         CultureInfo _cultureInfo = null;
+        /// <summary>
+        /// Current CultureInfo
+        /// </summary>
         public CultureInfo CultureInfo
         {
             get
             {
-                if (_cultureInfo == null && !string.IsNullOrEmpty(_cultureName)) _cultureInfo = CultureInfo.GetCultures(CultureTypes.AllCultures).FirstOrDefault(i => i.EnglishName == _cultureName).Clone() as CultureInfo;
-                if (_cultureInfo == null && Report.ExecutionView != this && Report.ExecutionView != null) _cultureInfo = Report.CultureInfo.Clone() as CultureInfo;
-                if (_cultureInfo == null) _cultureInfo = Report.Repository.CultureInfo.Clone() as CultureInfo;
+                //Culture from the view if specified
+                if (_cultureInfo == null && !string.IsNullOrEmpty(_cultureName))
+                {
+                    var culture = CultureInfo.GetCultures(CultureTypes.AllCultures).FirstOrDefault(i => i.EnglishName == _cultureName);
+                    if (culture != null) _cultureInfo = CultureInfo.GetCultures(CultureTypes.AllCultures).FirstOrDefault(i => i.EnglishName == _cultureName).Clone() as CultureInfo;
+                }
+                //Culture from the execution view
+                if (_cultureInfo == null && Report.ExecutionView != this && Report.ExecutionView != null)
+                {
+                    _cultureInfo = Report.CultureInfo.Clone() as CultureInfo;
+                    if (_cultureInfo.TwoLetterISOLanguageName == "iv") _cultureInfo = new CultureInfo("en");
+                }
+                //Culture from the repository
+                if (_cultureInfo == null) {
+                    _cultureInfo = Report.Repository.CultureInfo.Clone() as CultureInfo;
+                    if (_cultureInfo.TwoLetterISOLanguageName == "iv") _cultureInfo = new CultureInfo("en");
+                }
                 return _cultureInfo;
             }
         }
 
+        /// <summary>
+        /// Set configurations for Excel or PDF converter
+        /// </summary>
         public void SetAdvancedConfigurations()
         {
             //Pdf & Excel
             if (PdfConverterEdited)
             {
-                _pdfConfigurations = PdfConverter.GetConfigurations();
+                PdfConfigurations = PdfConverter.GetConfigurations();
             }
             if (ExcelConverterEdited)
             {
-                _excelConfigurations = ExcelConverter.GetConfigurations();
+                ExcelConfigurations = ExcelConverter.GetConfigurations();
             }
 
             foreach (var view in Views) view.SetAdvancedConfigurations();
         }
 
+        #region Web Report Server and Dashboard Widgets
 
-        private bool _webExec = true;
-        [Category("Web Report Server"), DisplayName("Web Execution"), Description("For the Web Report Server: If true, the view can be executed from the report list."), Id(2, 6)]
+        /// <summary>
+        /// For the Web Report Server: If true, the view can be executed from the report list.
+        /// </summary>
+        [Category("Web Report Server and Dashboard"), DisplayName("Web execution"), Description("For the Web Report Server: If true, the view can be executed from the report list."), Id(2, 6)]
         [DefaultValue(true)]
-        public bool WebExec
+        public bool WebExec { get; set; } = true;
+
+
+        public bool ShouldSerializeWidgetDefinition()
         {
-            get { return _webExec; }
-            set { _webExec = value; }
+            return WidgetDefinition.IsPublished || !string.IsNullOrEmpty(WidgetDefinition.GUID);
         }
 
+        /// <summary>
+        /// Settings to publish the view as a dashboard widget. If a name is specified, the widget can be selected to build dashboards from the Web Report Server.
+        /// </summary>
+        [TypeConverter(typeof(ExpandableObjectConverter))]
+        [DisplayName("Widget definition"), Description("Settings to publish the view as a dashboard widget. If a name is specified, the widget can be selected to build dashboards from the Web Report Server."), Category("Web Report Server and Dashboard"), Id(3, 6)]
+        public DashboardWidget WidgetDefinition { get; set; } = new DashboardWidget();
 
+        #endregion
+
+        /// <summary>
+        /// Current report model if any
+        /// </summary>
         [XmlIgnore]
         public ReportModel Model
         {
@@ -546,17 +763,69 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// Current reference view if any
+        /// </summary>
+        [XmlIgnore]
+        public ReportView ReferenceView
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(ReferenceViewGUID)) return null;
+                return _report.FindView(_report.Views, ReferenceViewGUID);
+            }
+        }
+
+        /// <summary>
+        /// Current parent view if any
+        /// </summary>
+        [XmlIgnore]
+        public ReportView ParentView { get; set; } = null;
+
+        /// <summary>
+        /// Object that can be used at run-time for any purpose
+        /// </summary>
+        [XmlIgnore]
+        public object Tag;
+
+        /// <summary>
+        /// Suffix that can be used to build JS identifier (e.g. for datatables)
+        /// </summary>
+        [XmlIgnore]
+        public string IdSuffix;
 
 
         #region PDF and Excel Converters
 
-        private List<string> _pdfConfigurations = new List<string>();
-        public List<string> PdfConfigurations
+        /// <summary>
+        /// The PDF configuration of the view
+        /// </summary>
+        public List<string> PdfConfigurations { get; set; } = new List<string>();
+        public bool ShouldSerializePdfConfigurations()
         {
-            get { return _pdfConfigurations; }
-            set { _pdfConfigurations = value; }
+            bool result = false;
+            if (Report.Repository.Configuration.PdfConfigurations.Count == 0)
+            {
+                result = PdfConfigurations.Count > 0;
+            }
+            else
+            {
+                for (int i = 0; i < PdfConfigurations.Count && i < Report.Repository.Configuration.PdfConfigurations.Count; i++)
+                {
+                    if (PdfConfigurations[i].Trim().Replace("\r\n", "\n") != Report.Repository.Configuration.PdfConfigurations[i].Trim().Replace("\r\n", "\n"))
+                    {
+                        result = true;
+                        break;
+                    }
+                }
+            }
+
+            return result;
         }
 
+        /// <summary>
+        /// Current SealPdfConverter
+        /// </summary>
         private SealPdfConverter _pdfConverter = null;
         [XmlIgnore]
         [TypeConverter(typeof(ExpandableObjectConverter))]
@@ -568,8 +837,9 @@ namespace Seal.Model
                 if (_pdfConverter == null)
                 {
                     _pdfConverter = SealPdfConverter.Create(Report.Repository.ApplicationPath);
+                    if (PdfConfigurations.Count == 0) PdfConfigurations = Report.Repository.Configuration.PdfConfigurations.ToList();
                     _pdfConverter.SetConfigurations(PdfConfigurations, this);
-                    _pdfConverter.EntityHandler = HelperEditor.HandlerInterface;
+                    _pdfConverter.EntityHandler = HelperEditor.HandlerInterface; //!NETCore
                     UpdateEditorAttributes();
                 }
                 return _pdfConverter;
@@ -577,19 +847,44 @@ namespace Seal.Model
             set { _pdfConverter = value; }
         }
 
+        /// <summary>
+        /// True if the PDF Converter was edited
+        /// </summary>
         public bool PdfConverterEdited
         {
             get { return _pdfConverter != null; }
         }
 
-        private List<string> _excelConfigurations = new List<string>();
-        public List<string> ExcelConfigurations
+        /// <summary>
+        /// The Excel configuration of the view
+        /// </summary>
+        public List<string> ExcelConfigurations { get; set; } = new List<string>();
+        public bool ShouldSerializeExcelConfigurations()
         {
-            get { return _excelConfigurations; }
-            set { _excelConfigurations = value; }
+            bool result = false;
+
+            if (Report.Repository.Configuration.ExcelConfigurations.Count == 0)
+            {
+                result = ExcelConfigurations.Count > 0;
+            }
+            else
+            {
+                for (int i = 0; i < ExcelConfigurations.Count && i < Report.Repository.Configuration.ExcelConfigurations.Count; i++)
+                {
+                    if (ExcelConfigurations[i].Trim().Replace("\r\n", "\n") != Report.Repository.Configuration.ExcelConfigurations[i].Trim().Replace("\r\n", "\n"))
+                    {
+                        result = true;
+                        break;
+                    }
+                }
+            }
+            return result;
         }
 
         private SealExcelConverter _excelConverter = null;
+        /// <summary>
+        /// Current Excel converter
+        /// </summary>
         [XmlIgnore]
         [TypeConverter(typeof(ExpandableObjectConverter))]
         [DisplayName("Excel Configuration"), Description("All the options applied to the Excel conversion from the view."), Category("View parameters"), Id(8, 4)]
@@ -600,8 +895,10 @@ namespace Seal.Model
                 if (_excelConverter == null)
                 {
                     _excelConverter = SealExcelConverter.Create(Report.Repository.ApplicationPath);
+                    if (ExcelConfigurations.Count == 0) ExcelConfigurations = Report.Repository.Configuration.ExcelConfigurations.ToList();
+
                     _excelConverter.SetConfigurations(ExcelConfigurations, this);
-                    _excelConverter.EntityHandler = HelperEditor.HandlerInterface;
+                    _excelConverter.EntityHandler = HelperEditor.HandlerInterface; //!NETCore
                     UpdateEditorAttributes();
                 }
                 return _excelConverter;
@@ -609,17 +906,20 @@ namespace Seal.Model
             set { _excelConverter = value; }
         }
 
+        /// <summary>
+        /// True if the Excel converter was edited
+        /// </summary>
         public bool ExcelConverterEdited
         {
             get { return _excelConverter != null; }
         }
 
+        /// <summary>
+        /// Convert the view to an Excel Sheet
+        /// </summary>
+        /// <param name="destination"></param>
+        /// <returns></returns>
         public string ConvertToExcel(string destination)
-        {
-            return ExcelConverter.ConvertToExcel(destination);
-        }
-
-        public string ConvertToCSV(string destination)
         {
             return ExcelConverter.ConvertToExcel(destination);
         }
@@ -627,6 +927,10 @@ namespace Seal.Model
         #endregion
 
         #region Helpers
+
+        /// <summary>
+        /// Editor Helper: Load the template configuration file
+        /// </summary>
         [Category("Helpers"), DisplayName("Reload template configuration"), Description("Load the template configuration file."), Id(2, 10)]
         [Editor(typeof(HelperEditor), typeof(UITypeEditor))]
         public string HelperReloadConfiguration
@@ -634,6 +938,9 @@ namespace Seal.Model
             get { return "<Click to reload the template configuration and refresh the parameters>"; }
         }
 
+        /// <summary>
+        /// Editor Helper: Reset all template parameters to their default values
+        /// </summary>
         [Category("Helpers"), DisplayName("Reset template parameter values"), Description("Reset all template parameters to their default values."), Id(3, 10)]
         [Editor(typeof(HelperEditor), typeof(UITypeEditor))]
         public string HelperResetParameters
@@ -641,6 +948,9 @@ namespace Seal.Model
             get { return "<Click to reset the view parameters to their default values>"; }
         }
 
+        /// <summary>
+        /// Editor Helper: Reset PDF configuration values to their default values
+        /// </summary>
         [Category("Helpers"), DisplayName("Reset PDF configurations"), Description("Reset PDF configuration values to their default values."), Id(7, 10)]
         [Editor(typeof(HelperEditor), typeof(UITypeEditor))]
         public string HelperResetPDFConfigurations
@@ -648,6 +958,9 @@ namespace Seal.Model
             get { return "<Click to reset the PDF configuration values to their default values>"; }
         }
 
+        /// <summary>
+        /// Editor Helper: Reset Excel configuration values to their default values
+        /// </summary>
         [Category("Helpers"), DisplayName("Reset Excel configurations"), Description("Reset Excel configuration values to their default values."), Id(8, 10)]
         [Editor(typeof(HelperEditor), typeof(UITypeEditor))]
         public string HelperResetExcelConfigurations
@@ -655,27 +968,25 @@ namespace Seal.Model
             get { return "<Click to reset the Excel configuration values to their default values>"; }
         }
 
-        string _information;
+        /// <summary>
+        /// Last information message
+        /// </summary>
         [XmlIgnore, Category("Helpers"), DisplayName("Information"), Description("Last information message."), Id(9, 10)]
         [EditorAttribute(typeof(InformationUITypeEditor), typeof(UITypeEditor))]
-        public string Information
-        {
-            get { return _information; }
-            set { _information = value; }
-        }
+        public string Information { get; set; }
 
-        string _error;
+        /// <summary>
+        /// Last error message
+        /// </summary>
         [XmlIgnore, Category("Helpers"), DisplayName("Error"), Description("Last error message."), Id(10, 10)]
         [EditorAttribute(typeof(ErrorUITypeEditor), typeof(UITypeEditor))]
-        public string Error
-        {
-            get { return _error; }
-            set { _error = value; }
-        }
+        public string Error { get; set; }
 
         #endregion
 
-
+        /// <summary>
+        /// Current template text of the view
+        /// </summary>
         [XmlIgnore]
         public string ViewTemplateText
         {
@@ -690,6 +1001,9 @@ namespace Seal.Model
             }
         }
         string _viewId = null;
+        /// <summary>
+        /// Identifier of the view
+        /// </summary>
         [XmlIgnore]
         public string ViewId
         {
@@ -700,12 +1014,17 @@ namespace Seal.Model
             }
         }
 
-
-        public string GetPartialTemplateKey(string name, Object model)
+        /// <summary>
+        /// Returns a partial template key form a given name and model
+        /// </summary>
+        public string GetPartialTemplateKey(string name, object model)
         {
             var path = Template.GetPartialTemplatePath(name);
             var partial = PartialTemplates.FirstOrDefault(i => i.Name == name);
-            if (!File.Exists(path) || partial == null) throw new Exception(string.Format("Unable to find partial template named '{0}'. Check the name and the file (.partial.cshtml) in the Views folder...", name));
+            if (!File.Exists(path) || partial == null)
+            {
+                throw new Exception(string.Format("Unable to find partial template named '{0}'. Check the name and the file (.partial.cshtml) in the Views folder...", name));
+            }
 
             string key, text = null;
             if (partial.UseCustom && !string.IsNullOrWhiteSpace(partial.Text))
@@ -727,19 +1046,22 @@ namespace Seal.Model
             catch (Exception ex)
             {
                 var message = (ex is TemplateCompilationException ? Helper.GetExceptionMessage((TemplateCompilationException)ex) : ex.Message);
-                _error += string.Format("Execution error when compiling the partial view template '{0}({1})':\r\n{2}\r\n", Name, name, message);
-                if (ex.InnerException != null) _error += "\r\n" + ex.InnerException.Message;
-                Report.ExecutionErrors += _error;
+                Error += string.Format("Execution error when compiling the partial view template '{0}({1})':\r\n{2}\r\n", Name, name, message);
+                if (ex.InnerException != null) Error += "\r\n" + ex.InnerException.Message;
+                Report.ExecutionErrors += Error;
                 throw ex;
             }
             return key;
         }
 
+        /// <summary>
+        /// Parse the view and returns the result
+        /// </summary>
         public string Parse()
         {
             string result = "";
             string phase = "compiling";
-            _error = "";
+            Error = "";
 
             try
             {
@@ -748,7 +1070,7 @@ namespace Seal.Model
                 if (!UseCustomTemplate || string.IsNullOrWhiteSpace(CustomTemplate))
                 {
                     //template -> file path + last modification
-                    key = string.Format("TPL:{0}_{1}", Template.FilePath, File.GetLastWriteTime(Template.FilePath).ToString("s"));
+                    key = Template.CompilationKey;
                 }
                 else
                 {
@@ -765,25 +1087,30 @@ namespace Seal.Model
                 result = RazorHelper.CompileExecute(ViewTemplateText, Report, key);
 
                 //For CSV, add just one new line
-                if (Report.Format == ReportFormat.csv) {
+                if (Report.Format == ReportFormat.csv)
+                {
                     result = result.Trim() + "\r\n" + (result.EndsWith("\r\n") ? "\r\n" : "");
                 }
             }
             catch (Exception ex)
             {
                 var message = (ex is TemplateCompilationException ? Helper.GetExceptionMessage((TemplateCompilationException)ex) : ex.Message);
-                _error += string.Format("Error got when {0} the view '{1}({2})':\r\n{3}\r\n", phase, Name, Template.Name, message);
-                if (ex.InnerException != null) _error += "\r\n" + ex.InnerException.Message;
+                Error += string.Format("Error got when {0} the view '{1}({2})':\r\n{3}\r\n", phase, Name, Template.Name, message);
+                if (ex.InnerException != null) Error += "\r\n" + ex.InnerException.Message;
             }
-            if (!string.IsNullOrEmpty(_error))
+            if (!string.IsNullOrEmpty(Error))
             {
-                Report.ExecutionErrors += _error;
-                result = Helper.ToHtml(_error);
+                Report.ExecutionErrors += Error;
+                result = Helper.ToHtml(Error);
             }
 
             return result;
         }
 
+        /// <summary>
+        /// Parse all children and returns the result
+        /// </summary>
+        /// <returns></returns>
         public string ParseChildren()
         {
             string result = "";
@@ -802,28 +1129,45 @@ namespace Seal.Model
             return result;
         }
 
+
+        /// <summary>
+        /// Helper to return a list of layout rows from the grid layout
+        /// </summary>
         public string[] GetGridLayoutRows(string gridLayout)
         {
             if (string.IsNullOrEmpty(gridLayout)) return new string[] { "" };
             return gridLayout.Replace("\r\n", "\n").Split('\n').Where(i => !string.IsNullOrWhiteSpace(i)).ToArray();
         }
+
+        /// <summary>
+        /// Helper to return a list of layout columns from a layout row
+        /// </summary>
         public string[] GetGridLayoutColumns(string rowLayout)
         {
             if (string.IsNullOrEmpty(rowLayout)) return new string[] { "" };
             return rowLayout.Trim().Split(';').Where(i => !string.IsNullOrWhiteSpace(i)).ToArray();
         }
 
+        /// <summary>
+        /// Returns the class of a layout column
+        /// </summary>
         public string GetGridLayoutColumnClass(string column)
         {
             if (!IsGridLayoutColumnForModel(column)) return column.Substring(1, column.Length - 2);
             return column;
         }
 
+        /// <summary>
+        /// True if the layout column is for a model
+        /// </summary>
         public bool IsGridLayoutColumnForModel(string column)
         {
             return !(column.StartsWith("(") && column.EndsWith(")"));
         }
 
+        /// <summary>
+        /// Initializes the view templates and parameters
+        /// </summary>
         public void InitTemplates(ReportView view, ref string errors)
         {
             view.InitParameters(false);
@@ -831,6 +1175,60 @@ namespace Seal.Model
             foreach (var child in view.Views) InitTemplates(child, ref errors);
         }
 
+        /// <summary>
+        /// Initializes the view properties from its reference view
+        /// </summary>
+        public void InitFromReferenceView()
+        {
+            var refView = ReferenceView;
+            if (refView != null)
+            {
+                InitPartialTemplates();
+                InitParameters(false);
+
+                //Templates
+                if (!UseCustomTemplate)
+                {
+                    UseCustomTemplate = refView.UseCustomTemplate;
+                    CustomTemplate = refView.CustomTemplate;
+                }
+
+                foreach (var pt in PartialTemplates)
+                {
+                    if (!pt.UseCustom)
+                    {
+                        var refTemplate = refView.PartialTemplates.FirstOrDefault(i => i.Name == pt.Name);
+                        if (refTemplate != null)
+                        {
+                            pt.UseCustom = refTemplate.UseCustom;
+                            pt.Text = refTemplate.Text;
+                        }
+                    }
+                }
+
+                //Parameters that have a default value
+                foreach (var parameter in Parameters.Where(i => i.Value == i.ConfigValue))
+                {
+                    var refParameter = refView.Parameters.FirstOrDefault(i => i.Name == parameter.Name);
+                    if (refParameter != null)
+                    {
+                        parameter.Value = refParameter.Value;
+                    }
+                }
+
+                //Excel
+                if (ExcelConverter != null && refView.ExcelConverter != null)
+                {
+                    ExcelConverter.InitFromReferenceView(refView);
+                }
+
+                //Pdf
+                if (PdfConverter != null && refView.PdfConverter != null)
+                {
+                    PdfConverter.InitFromReferenceView(refView);
+                }
+            }
+        }
         private void initAxisProperties(ResultPage page, List<ResultCell[]> XDimensions)
         {
             bool hasPie = Model.Elements.Exists(i => (i.Nvd3Serie == NVD3SerieDefinition.PieChart || i.ChartJSSerie == ChartJSSerieDefinition.Pie || i.ChartJSSerie == ChartJSSerieDefinition.PolarArea || i.PlotlySerie == PlotlySerieDefinition.Pie) && i.PivotPosition == PivotPosition.Data);
@@ -941,9 +1339,12 @@ namespace Seal.Model
                             //Classic calculation
                             serieValue.Yvalue.Calculate();
                         }
-                        page.PrimaryXDimensions.Sort(CompareXDimensionsWithSeries);
+                        if (ResultCell.ShouldSort(page.PrimaryXDimensions)) page.PrimaryXDimensions.Sort(CompareXDimensionsWithSeries);
                     }
-                    else page.PrimaryXDimensions.Sort(CompareXDimensionsWithAxis);
+                    else
+                    {
+                        if (ResultCell.ShouldSort(page.PrimaryXDimensions)) page.PrimaryXDimensions.Sort(CompareXDimensionsWithAxis);
+                    }
                 }
             }
             initChartXValues(page);
@@ -962,11 +1363,11 @@ namespace Seal.Model
                 result.Append(Helper.QuoteSingle(HttpUtility.JavaScriptStringEncode(xval)));
                 if (xval.Length > page.AxisXLabelMaxLen) page.AxisXLabelMaxLen = xval.Length;
 
-                var navigation = Model.GetNavigation(((ResultCell[])key)[0]);
+                var navigation = Model.GetNavigation(((ResultCell[])key)[0], true);
                 if (!string.IsNullOrEmpty(navigation))
                 {
                     if (navs.Length != 0) navs.Append(",");
-                    navs.Append(navigation);
+                    navs.AppendFormat("\"{0}\"", navigation);
                 }
             }
 
@@ -1072,6 +1473,9 @@ namespace Seal.Model
             page.ChartInitDone = true;
         }
 
+        /// <summary>
+        /// Init the chart for a ResultPage
+        /// </summary>
         public bool InitPageChart(ResultPage page)
         {
             if (Model != null)
@@ -1088,14 +1492,16 @@ namespace Seal.Model
                 }
                 catch (Exception ex)
                 {
-                    _error = "Error got when generating chart:\r\n" + ex.Message;
+                    Error = "Error got when generating chart:\r\n" + ex.Message;
                     return false;
                 }
             }
             return true;
         }
 
-
+        /// <summary>
+        /// Returns a view from its identifier
+        /// </summary>
         public ReportView GetView(string viewId)
         {
             if (ViewId == viewId) return this;
@@ -1110,17 +1516,42 @@ namespace Seal.Model
             return result;
         }
 
+        /// <summary>
+        /// Returns the first ancestor view having a model
+        /// </summary>
+        public ReportView ModelView
+        {
+            get
+            {
+                ReportView result = this;
+                while (result.ParentView != null)
+                {
+                    if (result.Model != null) return result;
+                    result = result.ParentView;
+                }
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Reset children identifiers
+        /// </summary>
         public void ReinitGUIDChildren()
         {
             foreach (ReportView child in Views)
             {
                 child.GUID = Guid.NewGuid().ToString();
+                if (!string.IsNullOrEmpty(child.WidgetDefinition.GUID)) child.WidgetDefinition.GUID = Guid.NewGuid().ToString();
                 child.ReinitGUIDChildren();
             }
         }
 
 
         List<string> _columnsHidden = null;
+
+        /// <summary>
+        /// True if the column is hidden
+        /// </summary>
         public bool IsColumnHidden(int col)
         {
             if (_columnsHidden == null) _columnsHidden = GetValue(Parameter.ColumnsHiddenParameter).Split(';').ToList();

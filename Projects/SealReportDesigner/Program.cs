@@ -1,16 +1,15 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows.Forms;
 using System.Threading;
-using Microsoft.Win32.TaskScheduler;
 using Seal.Model;
 using System.IO;
 using Seal.Forms;
+using Seal.Helpers;
+using System.Reflection;
 
 namespace Seal
 {
@@ -58,13 +57,13 @@ namespace Seal
                 }
                 var reportViewer = new ReportViewerForm(true, Properties.Settings.Default.ShowScriptErrors);
                 reportViewer.ViewReport(report, report.Repository, false, viewGUID, outputGUID, report.FilePath);
+
                 Application.Run();
             }
             else
             {
                 Application.Run(new ReportDesigner());
             }
-
         }
 
         private static void ExceptionHandler(object sender, ThreadExceptionEventArgs t)
@@ -73,6 +72,7 @@ namespace Seal
             try
             {
                 result = MessageBox.Show(t.Exception.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Helper.WriteLogEntry("Report Designer", System.Diagnostics.EventLogEntryType.Error, t.Exception.Message + "\r\n" + t.Exception.StackTrace);
             }
             catch
             {

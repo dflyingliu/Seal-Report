@@ -1,11 +1,10 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.ComponentModel;
 using System.Windows.Forms;
 using Seal.Model;
@@ -16,7 +15,7 @@ using Seal.Helpers;
 using System.Collections;
 using System.Data.Common;
 using System.Data.Odbc;
-using System.Diagnostics;
+using System.Data.SqlClient;
 
 namespace Seal.Forms
 {
@@ -25,10 +24,12 @@ namespace Seal.Forms
         int GetSort();
     }
 
-    public class SourceFolder : ITreeSort { public int GetSort() { return 0; } }
-    public class ModelFolder : ITreeSort { public int GetSort() { return 2; } }
-    public class OutputFolder : ITreeSort { public int GetSort() { return 4; } }
-    public class ScheduleFolder : ITreeSort { public int GetSort() { return 5; } }
+    public class SourceFolder : ITreeSort { public int GetSort() { return 1; } }
+    public class TasksFolder : ITreeSort { public int GetSort() { return 2; } }
+    public class ModelFolder : ITreeSort { public int GetSort() { return 3; } }
+    public class ViewFolder : ITreeSort { public int GetSort() { return 4; } }
+    public class OutputFolder : ITreeSort { public int GetSort() { return 5; } }
+    public class ScheduleFolder : ITreeSort { public int GetSort() { return 6; } }
 
     public class ConnectionFolder : ITreeSort { public int GetSort() { return 0; } }
     public class TableFolder : ITreeSort { public int GetSort() { return 1; } }
@@ -352,8 +353,8 @@ namespace Seal.Forms
             }
             else if (entity is MetaTable && source != null)
             {
-                selectSource = ((MetaTable)entity).Columns.OrderBy(i => i.Name).ToList();
-                displayName = "Name";
+                selectSource = ((MetaTable)entity).Columns.OrderBy(i => i.DisplayName2).ToList();
+                displayName = "DisplayName2";
             }
             else if (entity is ModelFolder)
             {
@@ -484,8 +485,8 @@ namespace Seal.Forms
             string entityName = null, copyEntityName = null;
             object entity = mainTreeView.SelectedNode.Tag;
             MetaSource metaSource = null;
-            if (entity is ModelFolder) entityName = "Model";
-            else if (entity is ConnectionFolder) entityName = "Connection";
+
+            if (entity is ConnectionFolder) entityName = "Connection";
             else if (entity is TableFolder)
             {
                 entityName = "Table";
@@ -657,7 +658,7 @@ namespace Seal.Forms
                 if (schemaTables.Columns.Contains("TABLE_SCHEMA")) schema = row["TABLE_SCHEMA"].ToString();
                 else if (schemaTables.Columns.Contains("TABLE_SCHEM")) schema = row["TABLE_SCHEM"].ToString();
                 table.Name = (!string.IsNullOrEmpty(schema) ? source.GetTableName(schema) + "." : "") + source.GetTableName(row["TABLE_NAME"].ToString());
-                table.Type = row["TABLE_TYPE"].ToString();
+                if (schemaTables.Columns.Contains("TABLE_TYPE")) table.Type = row["TABLE_TYPE"].ToString();
                 table.Source = source;
                 tables.Add(table);
             }
@@ -831,73 +832,63 @@ namespace Seal.Forms
             if (selectedEntity is MetaSource && propertyName == "ConnectionGUID")
             {
                 var entity = selectedEntity as MetaSource;
-                if (newValue != ReportSource.DefaultRepositoryConnectionGUID &&
+                if (e.OldValue != null &&  newValue != ReportSource.DefaultRepositoryConnectionGUID &&
                     newValue != ReportSource.DefaultReportConnectionGUID &&
                     !entity.Connections.Exists(i => i.GUID == newValue)) entity.ConnectionGUID = e.OldValue.ToString();
             }
             if (selectedEntity is ReportModel && propertyName == "ConnectionGUID")
             {
                 var entity = selectedEntity as ReportModel;
-                if (newValue != ReportSource.DefaultRepositoryConnectionGUID &&
+                if (e.OldValue != null && newValue != ReportSource.DefaultRepositoryConnectionGUID &&
                     newValue != ReportSource.DefaultReportConnectionGUID &&
                     !entity.Source.Connections.Exists(i => i.GUID == newValue)) entity.ConnectionGUID = e.OldValue.ToString();
             }
             if (selectedEntity is ReportTask && propertyName == "ConnectionGUID")
             {
                 var entity = selectedEntity as ReportTask;
-                if (newValue != ReportSource.DefaultRepositoryConnectionGUID &&
+                if (e.OldValue != null && newValue != ReportSource.DefaultRepositoryConnectionGUID &&
                     newValue != ReportSource.DefaultReportConnectionGUID &&
                     !entity.Source.Connections.Exists(i => i.GUID == newValue)) entity.ConnectionGUID = e.OldValue.ToString();
             }
             else if (selectedEntity is MetaColumn && propertyName == "EnumGUID")
             {
                 var entity = selectedEntity as MetaColumn;
-                if (!entity.Source.MetaData.Enums.Exists(i => i.GUID == newValue)) entity.EnumGUID = e.OldValue.ToString();
+                if (e.OldValue != null && !entity.Source.MetaData.Enums.Exists(i => i.GUID == newValue)) entity.EnumGUID = e.OldValue.ToString();
             }
             else if (selectedEntity is ReportModel && propertyName == "SourceGUID")
             {
                 var entity = selectedEntity as ReportModel;
-                if (!entity.Report.Sources.Exists(i => i.GUID == newValue)) entity.SourceGUID = e.OldValue.ToString();
+                if (e.OldValue != null && !entity.Report.Sources.Exists(i => i.GUID == newValue)) entity.SourceGUID = e.OldValue.ToString();
             }
             else if (selectedEntity is ReportTask && propertyName == "SourceGUID")
             {
                 var entity = selectedEntity as ReportTask;
-                if (!entity.Report.Sources.Exists(i => i.GUID == newValue)) entity.SourceGUID = e.OldValue.ToString();
+                if (e.OldValue != null && !entity.Report.Sources.Exists(i => i.GUID == newValue)) entity.SourceGUID = e.OldValue.ToString();
             }
             else if (selectedEntity is ReportView && propertyName == "ModelGUID")
             {
                 var entity = selectedEntity as ReportView;
-                if (!entity.Report.Models.Exists(i => i.GUID == newValue)) entity.ModelGUID = e.OldValue.ToString();
+                if (e.OldValue != null && !entity.Report.Models.Exists(i => i.GUID == newValue)) entity.ModelGUID = e.OldValue.ToString();
             }
-            else if (selectedEntity is ViewFolder && propertyName == "ViewGUID")
+            else if (selectedEntity is Report && propertyName == "ViewGUID")
             {
-                var entity = selectedEntity as ViewFolder;
-                if (!entity.Report.Views.Exists(i => i.GUID == newValue)) entity.ViewGUID = e.OldValue.ToString();
+                var entity = selectedEntity as Report;
+                if (e.OldValue != null && !entity.Views.Exists(i => i.GUID == newValue)) entity.ViewGUID = e.OldValue.ToString();
             }
             else if (selectedEntity is ReportOutput && propertyName == "ViewGUID")
             {
                 var entity = selectedEntity as ReportOutput;
-                if (!entity.Report.Views.Exists(i => i.GUID == newValue)) entity.ViewGUID = e.OldValue.ToString();
+                if (e.OldValue != null && !entity.Report.Views.Exists(i => i.GUID == newValue)) entity.ViewGUID = e.OldValue.ToString();
             }
             else if (selectedEntity is MetaJoin && propertyName == "LeftTableGUID")
             {
                 var entity = selectedEntity as MetaJoin;
-                if (!entity.Source.MetaData.Tables.Exists(i => i.GUID == newValue)) entity.LeftTableGUID = e.OldValue.ToString();
+                if (e.OldValue != null && !entity.Source.MetaData.Tables.Exists(i => i.GUID == newValue)) entity.LeftTableGUID = e.OldValue.ToString();
             }
             else if (selectedEntity is MetaJoin && propertyName == "RightTableGUID")
             {
                 var entity = selectedEntity as MetaJoin;
-                if (!entity.Source.MetaData.Tables.Exists(i => i.GUID == newValue)) entity.RightTableGUID = e.OldValue.ToString();
-            }
-            else if (selectedEntity is ReportModel && propertyName == "ForceJoinTableGUID")
-            {
-                var entity = selectedEntity as ReportModel;
-                if (!entity.Source.MetaData.Tables.Exists(i => i.GUID == newValue)) entity.ForceJoinTableGUID = e.OldValue.ToString();
-            }
-            else if (selectedEntity is ReportModel && propertyName == "AvoidJoinTableGUID")
-            {
-                var entity = selectedEntity as ReportModel;
-                if (!entity.Source.MetaData.Tables.Exists(i => i.GUID == newValue)) entity.AvoidJoinTableGUID = e.OldValue.ToString();
+                if (e.OldValue != null && !entity.Source.MetaData.Tables.Exists(i => i.GUID == newValue)) entity.RightTableGUID = e.OldValue.ToString();
             }
         }
 
@@ -962,7 +953,7 @@ namespace Seal.Forms
                     }
 
                 }
-                else if (selectedEntity is MetaJoin && propertyName == "Name")
+                else if (selectedEntity is MetaJoin && (propertyName == "Name" || propertyName == "LeftTableGUID" || propertyName == "RightTableGUID"))
                 {
                     MetaJoin entity = (MetaJoin)selectedEntity;
                     entity.Name = Helper.GetUniqueName(entity.Name, (from i in source.MetaData.Joins where i != entity select i.Name).ToList());

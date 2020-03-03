@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -21,10 +21,20 @@ using System.Data.Common;
 using System.Data.Odbc;
 using System.Xml.Serialization;
 using System.Globalization;
+using System.Net.Mail;
+using System.Data.SqlClient;
+using System.Linq;
 
 namespace Seal.Helpers
 {
-    public class Helper
+    /// <summary>
+    /// Helper Objects
+    /// </summary>
+    internal class NamespaceDoc
+    {
+    }
+
+    public partial class Helper
     {
         public static string GetEnumDescription(Type type, Object value)
         {
@@ -39,6 +49,36 @@ namespace Seal.Helpers
             foreach (PropertyDescriptor item in TypeDescriptor.GetProperties(src))
             {
                 item.SetValue(dest, item.GetValue(src));
+            }
+        }
+
+
+        static public void CopyPropertiesDifferentObjects(object src, object dest)
+        {
+            var propSource = TypeDescriptor.GetProperties(src);
+            var propDest = TypeDescriptor.GetProperties(dest);
+            foreach (PropertyDescriptor itemDest in propDest)
+            {
+                var itemSource = propSource.Find(itemDest.Name, true);
+                if (itemSource != null)
+                {
+                    try
+                    {
+                        itemDest.SetValue(dest, itemSource.GetValue(src));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(itemDest.Name + " " + ex.Message);
+                    }
+                }
+            }
+        }
+
+        static public void CopyPropertiesFromReference(object defaultObject, object referenceObject, object destObject)
+        {
+            foreach (PropertyDescriptor item in TypeDescriptor.GetProperties(defaultObject))
+            {
+                if (item.GetValue(destObject) == item.GetValue(defaultObject)) item.SetValue(destObject, item.GetValue(referenceObject));
             }
         }
 
@@ -100,6 +140,35 @@ namespace Seal.Helpers
             else input = new StringBuilder(value);
         }
 
+        static public List<string> GetStringList(string listInput)
+        {
+            var result = new List<string>();
+            if (!string.IsNullOrEmpty(listInput))
+            {
+                foreach (var input in listInput.Replace("\r\n", ";").Split(';'))
+                {
+                    if (!string.IsNullOrEmpty(input)) result.Add(input);
+                }
+            }
+            return result;
+        }
+
+        static public bool ValidateNumeric(string value, out Double d)
+        {
+            bool result = false;
+            if (Double.TryParse(value, out d))
+            {
+                result = true;
+            }
+            else
+            {
+                if (value.Contains(".")) value = value.Replace(".", ",");
+                else if (value.Contains(",")) value = value.Replace(",", ".");
+                if (Double.TryParse(value, out d)) result = true;
+            }
+            return result;
+        }
+
         static public string ConcatCellValues(ResultCell[] cells, string separator)
         {
             string result = "";
@@ -133,7 +202,17 @@ namespace Seal.Helpers
 
         static public string ToMomentJSFormat(CultureInfo culture, string datetimeFormat)
         {
-            return datetimeFormat.Replace("y", "Y").Replace("d", "D").Replace("tt", "A").Replace("z", "Z").Replace("/", culture.DateTimeFormat.DateSeparator);
+            string format = datetimeFormat;
+            if (datetimeFormat == "d") format = culture.DateTimeFormat.ShortDatePattern;
+            else if (datetimeFormat == "D") format = culture.DateTimeFormat.LongDatePattern;
+            else if (datetimeFormat == "t") format = culture.DateTimeFormat.ShortTimePattern;
+            else if (datetimeFormat == "T") format = culture.DateTimeFormat.LongTimePattern;
+            else if (datetimeFormat == "g") format = culture.DateTimeFormat.ShortDatePattern + " " + culture.DateTimeFormat.ShortTimePattern;
+            else if (datetimeFormat == "G") format = culture.DateTimeFormat.ShortDatePattern + " " + culture.DateTimeFormat.LongTimePattern;
+            else if (datetimeFormat == "f") format = culture.DateTimeFormat.LongDatePattern + " " + culture.DateTimeFormat.ShortTimePattern;
+            else if (datetimeFormat == "F") format = culture.DateTimeFormat.LongDatePattern + " " + culture.DateTimeFormat.LongTimePattern;
+
+            return format.Replace("y", "Y").Replace("d", "D").Replace("tt", "A").Replace("z", "Z").Replace("/", culture.DateTimeFormat.DateSeparator);
         }
 
         static public string RemoveHTMLTags(string value)
@@ -161,6 +240,8 @@ namespace Seal.Helpers
             result = string.Join(" ", Regex.Split(result, @"([A-Z][a-z]+)"));
             result = result.Replace('_', ' ').Trim();
             result = result.Replace("  ", " ");
+            result = result.Replace("  ", " ");
+            result = result.Replace("  ", " ");
             if (result.Length > 0) result = result.Substring(0, 1).ToUpper() + result.Substring(1);
             return result.Trim();
         }
@@ -174,7 +255,10 @@ namespace Seal.Helpers
                 result = Helper.NetTypeConverter(Helper.OleDbToNetTypeConverter(columnType));
                 if (columnType == OleDbType.WChar || columnType == OleDbType.VarWChar || columnType == OleDbType.LongVarWChar) result = ColumnType.UnicodeText;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
             return result;
         }
 
@@ -185,7 +269,10 @@ namespace Seal.Helpers
             {
                 result = Helper.OdbcTypeConverter(odbcType);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
             return result;
         }
 
@@ -246,7 +333,7 @@ namespace Seal.Helpers
 
         static public ColumnType NetTypeConverter(Type netType)
         {
-            if (netType == typeof(string) || netType== typeof(Guid)) return ColumnType.Text;
+            if (netType == typeof(string) || netType == typeof(Guid)) return ColumnType.Text;
             if (netType == typeof(DateTime)) return ColumnType.DateTime;
             return ColumnType.Numeric;
         }
@@ -329,29 +416,17 @@ namespace Seal.Helpers
             return "0";
         }
 
-        public static bool CanDragAndDrop(DragEventArgs e)
-        {
-            return (e.Data.GetDataPresent(typeof(TreeNode)) && ((TreeNode)e.Data.GetData(typeof(TreeNode))).Tag is MetaColumn) || e.Data.GetDataPresent(typeof(Button));
-        }
-
         static public string GetExceptionMessage(TemplateCompilationException ex)
         {
             var result = new StringBuilder("");
+            var firstError = "";
             foreach (var err in ex.CompilerErrors)
             {
+                if (string.IsNullOrEmpty(firstError) && err.Line > 0) firstError = err.ErrorText + "\r\n\r\n";
                 result.AppendFormat("{0}\r\nLine {1} Column {2} Error Number {3}\r\n", err.ErrorText, err.Line, err.Column, err.ErrorNumber);
             }
-            return result.ToString();
+            return firstError + result.ToString();
         }
-
-        static public string GetOleDbConnectionString(string input, string userName, string password)
-        {
-            string result = input;
-            if (input != null && !input.Contains("User ID=") && !string.IsNullOrEmpty(userName)) result += string.Format(";User ID={0}", userName);
-            if (input != null && !input.Contains("Password=") && !string.IsNullOrEmpty(password)) result += string.Format(";Password={0}", password);
-            return result;
-        }
-        
 
         static public void ExecutePrePostSQL(DbConnection connection, string sql, object model, bool ignoreErrors)
         {
@@ -374,25 +449,6 @@ namespace Seal.Helpers
             }
         }
 
-        public static GridItemCollection GetAllGridEntries(PropertyGrid grid)
-        {
-            object view = grid.GetType().GetField("gridView", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(grid);
-            return (GridItemCollection)view.GetType().InvokeMember("GetAllGridEntries", BindingFlags.InvokeMethod | BindingFlags.NonPublic | BindingFlags.Instance, null, view, null);
-        }
-
-        public static GridItem GetGridEntry(PropertyGrid grid, string label)
-        {
-            var entries = Helper.GetAllGridEntries(grid);
-            if (entries != null)
-            {
-                foreach (GridItem item in entries)
-                {
-                    string label2 = item.Label.Replace("\t", "").ToLower();
-                    if (label2 == label) return item;
-                }
-            }
-            return null;
-        }
 
         public static string FormatMessage(string message)
         {
@@ -414,77 +470,30 @@ namespace Seal.Helpers
             return s;
         }
 
-        private static void WriteLogEntry(string source, EventLogEntryType type, string message, params object[] args)
+        public static void WriteLogEntry(string source, EventLogEntryType type, string message, params object[] args)
         {
             string msg = message;
             try
             {
                 if (args.Length != 0) msg = string.Format(message, args);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
             try
             {
+                Console.WriteLine(msg);
+                if (msg.Length > 25000)
+                {
+                    msg = msg.Substring(0, 25000) + "\r\n...\r\nMessage truncated, check the log file in the Logs Repository sub-folder.";
+                }
                 EventLog.WriteEntry(source, msg, type);
             }
-            catch { }
-        }
-
-
-        private static string GetIPAddress(HttpRequestBase request)
-        {
-            string ipAddress = request.ServerVariables["HTTP_X_FORWARDED_FOR"];
-            if (!string.IsNullOrEmpty(ipAddress))
+            catch (Exception ex)
             {
-                string[] addresses = ipAddress.Split(',');
-                if (addresses.Length != 0)
-                {
-                    return addresses[0];
-                }
+                Console.WriteLine(ex.Message);
             }
-            return request.ServerVariables["REMOTE_ADDR"];
-        }
-
-        private static string GetContextDetail(HttpRequestBase request, SecurityUser user)
-        {
-            var result = new StringBuilder("\r\n");
-            if (user != null) result.AppendFormat("User: '{0}'; Groups: '{1}'; Windows User: '{2}'\r\n", user.Name, user.SecurityGroupsDisplay, Environment.UserName);
-            if (request != null)
-            {
-                result.AppendFormat("URL: '{0}'\r\n", request.Url.OriginalString);
-                if (request.RequestContext != null && request.RequestContext.HttpContext != null) result.AppendFormat("Session: '{0}'\r\n", request.RequestContext.HttpContext.Session.SessionID);                
-                result.AppendFormat("IP: '{0}'\r\n", GetIPAddress(request));
-                if (request.Form.Count > 0) foreach (string key in request.Form.Keys) result.AppendFormat("{0}={1}\r\n", key, request.Form[key]);
-                if (request.QueryString.Count > 0) foreach (string key in request.QueryString.Keys) result.AppendFormat("{0}={1}\r\n", key, request.QueryString[key]);
-            }
-            return result.ToString();
-        }
-
-        public static void WriteWebException(Exception ex, HttpRequestBase request, SecurityUser user)
-        {
-            var currentEx = ex;
-            var message = new StringBuilder("Unexpected error:\r\n");
-            while (currentEx != null)
-            {
-                message.AppendFormat("\r\n{0}\r\n({1})\r\n", currentEx.Message, currentEx.StackTrace);
-                currentEx = currentEx.InnerException;
-            }
-            message.Append(GetContextDetail(request, user));
-            WriteLogEntry("Seal Web Server", EventLogEntryType.Error, message.ToString());
-        }
-
-        public static void WriteLogEntryWeb(EventLogEntryType type, string message, params object[] args)
-        {
-            WriteLogEntry("Seal Web Server", type, message, args);
-        }
-
-        public static void WriteLogEntryWeb(EventLogEntryType type, HttpRequestBase request, SecurityUser user, string message, params object[] args)
-        {
-            WriteLogEntry("Seal Web Server", type, message + GetContextDetail(request, user), args);
-        }
-
-        public static void WriteLogEntryWebDebug(HttpRequestBase request, SecurityUser user, string message)
-        {
-            WriteLogEntry("Seal Web Server", EventLogEntryType.Information, message + GetContextDetail(request, user));
         }
 
         public static void WriteLogEntryScheduler(EventLogEntryType type, string message, params object[] args)
@@ -520,48 +529,6 @@ namespace Seal.Helpers
             return (major >= 6);
         }
 
-        static bool _checkTaskSchedulerOSDone = false;
-        public static bool CheckTaskSchedulerOS()
-        {
-            if (!IsValidOS() && !_checkTaskSchedulerOSDone)
-            {
-                if (MessageBox.Show("The Task Scheduler works only with Windows Vista, 7, 2008 or above...\r\nDo you want to continue ?", "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.Cancel)
-                {
-                    return false;
-                }
-                _checkTaskSchedulerOSDone = true;
-            }
-            return true;
-        }
-
-        static bool _checkWebServerOSDone = false;
-        public static bool CheckWebServerOS()
-        {
-            if (!IsValidOS() && !_checkWebServerOSDone)
-            {
-                if (MessageBox.Show("The Web Server works only with Windows Vista, 7, 2008 or above...\r\nDo you want to continue ?", "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.Cancel)
-                {
-                    return false;
-                }
-                _checkWebServerOSDone = true;
-            }
-            return true;
-        }
-
-        static bool _checkOleDBDone = false;
-        public static bool CheckOLEDBOS()
-        {
-            if (!IsValidOS() && !_checkOleDBDone)
-            {
-                if (MessageBox.Show("The OLEDB Data Link Editor works only with Windows Vista, 7, 2008 or above...\r\nDo you want to continue ?", "Warning", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.Cancel)
-                {
-                    return false;
-                }
-                _checkOleDBDone = true;
-                return false;
-            }
-            return true;
-        }
 
         public static void DisplayDataTable(DataTable table)
         {
@@ -587,9 +554,17 @@ namespace Seal.Helpers
                 command.CommandText = sql;
                 adapter = new OdbcDataAdapter(command);
             }
+            else if (connection is SqlConnection)
+            {
+                SqlCommand command = ((SqlConnection)connection).CreateCommand();
+                command.CommandTimeout = 0;
+                command.CommandText = sql;
+                adapter = new SqlDataAdapter(command);
+            }
             else
             {
                 OleDbCommand command = ((OleDbConnection)connection).CreateCommand();
+                command.CommandTimeout = 0;
                 command.CommandText = sql;
                 adapter = new OleDbDataAdapter(command);
             }
@@ -618,37 +593,65 @@ namespace Seal.Helpers
             return serializer.Deserialize(ms);
         }
 
-        public static DbConnection DbConnectionFromConnectionString(string connectionString)
+        public static DbConnection DbConnectionFromConnectionString(ConnectionType connectionType, string connectionString)
         {
             DbConnection connection = null;
-            OleDbConnectionStringBuilder builder = new System.Data.OleDb.OleDbConnectionStringBuilder(connectionString);
-            string provider = builder["Provider"].ToString();
-            if (provider.StartsWith("MSDASQL"))
+            if (connectionType == ConnectionType.MSSQLServer)
             {
-                //Provider=MSDASQL.1;Persist Security Info=False;Extended Properties="DSN=mysql2;SERVER=localhost;UID=root;DATABASE=sakila;PORT=3306";Initial Catalog=sakila
-                //Provider=MSDASQL.1;Persist Security Info=True;Data Source=mysql;Initial Catalog=sakila
-                //Provider=MSDASQL.1;Persist Security Info=False;Extended Properties="DSN=brCRM;DBQ=C:\tem\adb.mdb;DriverId=25;FIL=MS Access;MaxBufferSize=2048;PageTimeout=5;UID=admin;"
-
-                //Extract the real ODBC connection string...to be able to use the OdbcConnection
-                string odbcConnectionString = "";
-                if (builder.ContainsKey("Extended Properties")) odbcConnectionString = builder["Extended Properties"].ToString();
-                else if (builder.ContainsKey("Data Source") && !string.IsNullOrEmpty(builder["Data Source"].ToString())) odbcConnectionString = "DSN=" + builder["Data Source"].ToString();
-                if (odbcConnectionString != "" && builder.ContainsKey("Initial Catalog")) odbcConnectionString += ";DATABASE=" + builder["Initial Catalog"].ToString();
-                if (odbcConnectionString != "" && builder.ContainsKey("User ID")) odbcConnectionString += ";UID=" + builder["User ID"].ToString();
-                if (odbcConnectionString != "" && builder.ContainsKey("Password")) odbcConnectionString += ";PWD=" + builder["Password"].ToString();
-
-                connection = new OdbcConnection(odbcConnectionString);
+                connection = new SqlConnection(connectionString);
+            }
+            else if (connectionType == ConnectionType.Odbc)
+            {
+                connection = new OdbcConnection(connectionString);
             }
             else
             {
-                connection = new OleDbConnection(connectionString);
+                OleDbConnectionStringBuilder builder = new OleDbConnectionStringBuilder(connectionString);
+                string provider = builder["Provider"].ToString();
+                if (provider.StartsWith("MSDASQL"))
+                {
+                    //Provider=MSDASQL.1;Persist Security Info=False;Extended Properties="DSN=mysql2;SERVER=localhost;UID=root;DATABASE=sakila;PORT=3306";Initial Catalog=sakila
+                    //Provider=MSDASQL.1;Persist Security Info=True;Data Source=mysql;Initial Catalog=sakila
+                    //Provider=MSDASQL.1;Persist Security Info=False;Extended Properties="DSN=brCRM;DBQ=C:\tem\adb.mdb;DriverId=25;FIL=MS Access;MaxBufferSize=2048;PageTimeout=5;UID=admin;"
+
+                    //Extract the real ODBC connection string...to be able to use the OdbcConnection
+                    string odbcConnectionString = "";
+                    if (builder.ContainsKey("Extended Properties")) odbcConnectionString = builder["Extended Properties"].ToString();
+                    else if (builder.ContainsKey("Data Source") && !string.IsNullOrEmpty(builder["Data Source"].ToString())) odbcConnectionString = "DSN=" + builder["Data Source"].ToString();
+                    if (odbcConnectionString != "" && builder.ContainsKey("Initial Catalog")) odbcConnectionString += ";DATABASE=" + builder["Initial Catalog"].ToString();
+                    if (odbcConnectionString != "" && builder.ContainsKey("User ID")) odbcConnectionString += ";UID=" + builder["User ID"].ToString();
+                    if (odbcConnectionString != "" && builder.ContainsKey("Password")) odbcConnectionString += ";PWD=" + builder["Password"].ToString();
+
+                    connection = new OdbcConnection(odbcConnectionString);
+                }
+                else
+                {
+                    connection = new OleDbConnection(connectionString);
+                }
             }
+
             return connection;
+        }
+
+        static public string GetOleDbConnectionString(string input, string userName, string password)
+        {
+            string result = input;
+            if (input != null && !input.Contains("User ID=") && !string.IsNullOrEmpty(userName)) result += string.Format(";User ID={0}", userName);
+            if (input != null && !input.Contains("Password=") && !string.IsNullOrEmpty(password)) result += string.Format(";Password={0}", password);
+            return result;
+        }
+
+        static public string GetOdbcConnectionString(string input, string userName, string password)
+        {
+            string result = input;
+            if (input != null && !input.Contains("UID=") && !string.IsNullOrEmpty(userName)) result += string.Format(";UID={0}", userName);
+            if (input != null && !input.Contains("PWD=") && !string.IsNullOrEmpty(password)) result += string.Format(";PWD={0}", password);
+            return result;
         }
 
         public static int CalculateHash(string str)
         {
-            return str.GetHashCode();
+            return string.IsNullOrEmpty(str) ? 0 : str.GetHashCode();
         }
 
 
@@ -664,5 +667,139 @@ namespace Seal.Helpers
             return "data:image/" + type + ";base64," + Convert.ToBase64String(filebytes, Base64FormattingOptions.None);
         }
 
+
+        static public bool HasTimeFormat(DateTimeStandardFormat formatType, string format)
+        {
+            if (formatType.ToString().Contains("Time")) return true;
+            return ((formatType == DateTimeStandardFormat.Custom || formatType == DateTimeStandardFormat.Default)
+                && (format.ToLower().Contains("t") || format.Contains("H") || format.Contains("m") || format.Contains("s")));
+        }
+
+        /// <summary>
+        /// Add email address to a MailAddressCollection
+        /// </summary>
+        static public void AddEmailAddresses(MailAddressCollection collection, string input)
+        {
+            if (!string.IsNullOrEmpty(input))
+            {
+                string[] addresses = input.Replace(";", "\r\n").Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+                foreach (string address in addresses)
+                {
+                    if (!string.IsNullOrWhiteSpace(address)) collection.Add(address);
+                }
+            }
+        }
+
+        //SQL Keywords management
+        public static string ClearAllSQLKeywords(string sql, ReportModel model = null)
+        {
+            sql = ClearSQLKeywords(sql, Repository.EnumFilterKeyword, "filter");
+            sql = ClearSQLKeywords(sql, Repository.EnumValuesKeyword, "NULL");
+            if (model != null) sql = model.ParseCommonRestrictions(sql);
+            sql = ClearSQLKeywords(sql, Repository.CommonRestrictionKeyword, "1=1");
+            sql = ClearSQLKeywords(sql, Repository.CommonValueKeyword, "NULL");
+            return sql;
+        }
+
+        public static string ClearSQLKeywords(string sql, string keyword, string replacedBy)
+        {
+            if (string.IsNullOrEmpty(sql)) return "";
+
+            //Replace keyword by 1=1
+            int index = 0;
+            do
+            {
+                index = sql.IndexOf(keyword, index);
+                if (index > 0)
+                {
+                    index += keyword.Length;
+                    for (int i = index; i < sql.Length; i++)
+                    {
+                        if (sql[i] == '}')
+                        {
+                            sql = sql.Replace(keyword + sql.Substring(index, i - index) + "}", replacedBy);
+                            index -= keyword.Length;
+                            break;
+                        }
+                    }
+                }
+            }
+            while (index > 0 && index < sql.Length);
+            return sql;
+        }
+
+        public static string AddCTE(string current, string CTE)
+        {
+            var result = current;
+            if (!string.IsNullOrEmpty(result))
+            {
+                if (CTE != null && CTE.Length > 5 && CTE.ToLower().Trim().StartsWith("with"))
+                {
+                    var startIndex = CTE.ToLower().IndexOf("with");
+                    if (startIndex >= 0) result += "," + CTE.Substring(startIndex + 5);
+                }
+            }
+            else result = CTE;
+
+            return result;
+        }
+
+        public static List<string> GetSQLKeywordNames(string sql, string keyword)
+        {
+            var result = new List<string>();
+            //Get keywords
+            int index = 0;
+            do
+            {
+                index = sql.IndexOf(keyword, index);
+                if (index > 0)
+                {
+                    index += keyword.Length;
+                    string restrictionName = "";
+                    for (int i = index; i < sql.Length; i++)
+                    {
+                        if (sql[i] == '}')
+                        {
+                            restrictionName = sql.Substring(index, i - index); ;
+                            break;
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(restrictionName)) result.Add(restrictionName);
+                }
+
+            }
+            while (index > 0);
+            return result;
+        }
+
+#if !NETCOREAPP
+        public static void RunInAnotherAppDomain(string assemblyFile, string[] args)
+        {
+            // RazorEngine cannot clean up from the default appdomain...
+            Console.WriteLine("Switching to second AppDomain, for RazorEngine...");
+            AppDomainSetup adSetup = new AppDomainSetup();
+            adSetup.ApplicationBase = AppDomain.CurrentDomain.SetupInformation.ApplicationBase;
+            var current = AppDomain.CurrentDomain;
+            // You only need to add strongnames when your appdomain is not a full trust environment.
+            var strongNames = new System.Security.Policy.StrongName[0];
+
+            var domain = AppDomain.CreateDomain(
+                Path.GetFileNameWithoutExtension(assemblyFile), null,
+                current.SetupInformation, new System.Security.PermissionSet(System.Security.Permissions.PermissionState.Unrestricted),
+                strongNames);
+            domain.ExecuteAssembly(assemblyFile, args);
+            // RazorEngine will cleanup. 
+            AppDomain.Unload(domain);
+        }
+#endif
+
+        public static string GetApplicationDirectory()
+        {
+            var assembly = Assembly.GetEntryAssembly();
+            if (assembly == null) assembly = Assembly.GetCallingAssembly();
+            if (assembly == null) assembly = new StackTrace().GetFrames().Last().GetMethod().Module.Assembly;
+            return Path.GetDirectoryName(assembly.Location);
+        }
     }
 }

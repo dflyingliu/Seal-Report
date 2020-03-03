@@ -1,16 +1,17 @@
-﻿using DynamicTypeDescriptor;
-using Seal.Converter;
-using System;
-using System.Collections.Generic;
+﻿//
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
+//
+using DynamicTypeDescriptor;
+using Seal.Forms;
 using System.ComponentModel;
-using System.Drawing.Design;
-using System.Linq;
-using System.Text;
-using System.Windows.Forms.Design;
 using System.Xml.Serialization;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// A SecurityColumn defines the security applied to a column for the Web Report Designer
+    /// </summary>
     public class SecurityColumn : RootEditor
     {
         #region Editor
@@ -31,43 +32,35 @@ namespace Seal.Model
         }
         #endregion
 
-
-        string _source;
+        /// <summary>
+        /// The name of the data source containing the column (optional)
+        /// </summary>
         [Category("Definition"), DisplayName("\tSource Name"), Description("The name of the data source containing the column (optional)."), Id(1, 1)]
-        public string Source
-        {
-            get { return _source; }
-            set { _source = value; }
-        }
+        public string Source { get; set; }
 
-        string _tag = "";
-        [Category("Definition"), DisplayName("Security Tag"), Description("The name of the security tag (must match with the tags defined in the columns)."), Id(2,1)]
-        public string Tag
-        {
-            get { return _tag; }
-            set { _tag = value; }
-        }
+        /// <summary>
+        /// The name of the security tag (must match with the tags defined in the columns)
+        /// </summary>
+        [Category("Definition"), DisplayName("Security Tag"), Description("The name of the security tag (must match with the tags defined in the columns)."), Id(2, 1)]
+        public string Tag { get; set; }
 
-        string _category = "";
+        /// <summary>
+        /// The name of the category (must match with categories defined in the columns)
+        /// </summary>
         [Category("Definition"), DisplayName("Category"), Description("The name of the category (must match with categories defined in the columns)."), Id(3, 1)]
-        public string Category
-        {
-            get { return _category; }
-            set { _category = value; }
-        }
+        public string Category { get; set; }
 
-        EditorRight _right = EditorRight.NoSelection;
+        /// <summary>
+        /// The right applied for the columns having this security tag or this category
+        /// </summary>
         [Category("Rights"), DisplayName("Column Right"), Description("The right applied for the columns having this security tag or this category."), Id(1, 2)]
         [TypeConverter(typeof(NamedEnumConverter))]
         [DefaultValue(EditorRight.NoSelection)]
-        public EditorRight Right
-        {
-            get { return _right; }
-            set {
-                _right = value;
-            }
-        }
+        public EditorRight Right { get; set; } = EditorRight.NoSelection;
 
+        /// <summary>
+        /// Display name
+        /// </summary>
         [XmlIgnore]
         public string DisplayName
         {

@@ -1,5 +1,5 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
@@ -8,10 +8,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
-using System.Text;
 using System.Windows.Forms;
-using System.Data.OleDb;
-using System.Reflection;
 using Seal.Model;
 using System.IO;
 using Seal.Helpers;
@@ -107,12 +104,6 @@ namespace Seal.Forms
             List<PropertyItem> properties = new List<PropertyItem>();
             foreach (PropertyDescriptor property in TypeDescriptor.GetProperties(_source))
             {
-                if (_source is ReportView && property.Name == "ChartConfigurationXml")
-                {
-                    properties.Add(new PropertyItem() { Name = "[View parameters] MS Chart Configuration", Object = property });
-                    continue;
-                }
-
                 if (!property.IsBrowsable || property.IsReadOnly) continue;
                 DisplayNameAttribute displayAtt = property.Attributes.OfType<DisplayNameAttribute>().FirstOrDefault();
                 CategoryAttribute catAtt = property.Attributes.OfType<CategoryAttribute>().FirstOrDefault();
@@ -127,7 +118,7 @@ namespace Seal.Forms
                         if (displayAtt.DisplayName.ToLower() == "view name") continue;
                     }
 
-                    properties.Add(new PropertyItem() { Name = string.Format("[{0}] {1}", catAtt.Category, displayAtt.DisplayName), Object = property });
+                    properties.Add(new PropertyItem() { Name = string.Format("[{0}] {1}", catAtt.Category, displayAtt.DisplayName.Replace("\t","")), Object = property });
                 }
             }
 
@@ -159,8 +150,7 @@ namespace Seal.Forms
             else if (_source is ReportView)
             {
                 sortedProperties.AddRange(properties.Where(i => i.Name.StartsWith("[Definition]")));
-                sortedProperties.AddRange(properties.Where(i => i.Name.StartsWith("[Custom template configuration]")));
-                sortedProperties.AddRange(properties.Where(i => i.Name.StartsWith("[Custom template text]")));
+                sortedProperties.AddRange(properties.Where(i => i.Name.StartsWith("[Custom template texts]")));
                 sortedProperties.AddRange(properties.Where(i => i.Name.StartsWith("[View parameters]")));
             }
             else if (_source is ReportTask)
@@ -178,6 +168,8 @@ namespace Seal.Forms
                 sortedProperties.AddRange(properties.Where(i => i.Name.StartsWith("[Folder]")));
                 sortedProperties.AddRange(properties.Where(i => i.Name.StartsWith("[Restrictions]")));
             }
+            //Add unsorted...
+            sortedProperties.AddRange(properties.Where(i => !sortedProperties.Exists(j => j == i)));
 
             propertiesCheckedListBox.DataSource = sortedProperties;
             propertiesCheckedListBox.DisplayMember = "Name";
@@ -250,7 +242,7 @@ namespace Seal.Forms
         string convertFileName(string fileName)
         {
             string newFileName = fileName.Replace(_report.Repository.ReportsFolder, "");
-            if (newFileName.StartsWith("\\")) newFileName = newFileName.Substring(1);
+            if (newFileName.StartsWith(Path.DirectorySeparatorChar.ToString())) newFileName = newFileName.Substring(1);
             if (newFileName.EndsWith(Repository.SealReportFileExtension)) newFileName = newFileName.Substring(0, newFileName.Length - 5);
             return newFileName;
         }
@@ -524,7 +516,7 @@ namespace Seal.Forms
                     {
                         try
                         {
-                            Report report = Report.LoadFromFile(fileName, _report.Repository);
+                            Report report = Report.LoadFromFile(fileName, _report.Repository, false);
                             filterTextBox_TextChanged(null, null);
                             reportsListBox.Items.Add(new PropertyItem() { Name = newFileName, Object = report });
                             buildDestinationList();
@@ -813,6 +805,22 @@ namespace Seal.Forms
                                     view.ExcelConverter = null;
                                     view.ExcelConfigurations = viewSource.ExcelConfigurations.ToList();
                                 }
+                                else if (descriptor.Name == "WidgetDefinition")
+                                {
+                                    //Keep previous widget GUID
+                                    if (string.IsNullOrEmpty(view.WidgetDefinition.GUID)) view.WidgetDefinition.GUID = Guid.NewGuid().ToString();
+                                    var guid = view.WidgetDefinition.GUID;
+                                    view.WidgetDefinition = (DashboardWidget) Helper.Clone(descriptor.GetValue(_source));
+                                    view.WidgetDefinition.GUID = guid;
+                                }
+                                else if (descriptor.Name == "PartialTemplates")
+                                {
+                                    view.PartialTemplates.Clear();
+                                    foreach (var pt in (List<ReportViewPartialTemplate>)descriptor.GetValue(_source))
+                                    {
+                                        view.PartialTemplates.Add((ReportViewPartialTemplate) Helper.Clone(pt));
+                                    }
+                                }
                                 else
                                 {
                                     descriptor.SetValue(view, descriptor.GetValue(_source));
@@ -902,15 +910,6 @@ namespace Seal.Forms
                             }
                         }
                     }
-                }
-
-                //Source is Report TasksFolder
-                else if (_source is TasksFolder)
-                {
-                    //Update report tasksScript
-                    Report reportDestination = destinationObject.Object as Report;
-                    if (!reportsToSave.Contains(reportDestination)) reportsToSave.Add(reportDestination);
-                    reportDestination.TasksScript = _report.TasksScript;
                 }
             }
 

@@ -1,18 +1,14 @@
 ﻿//
-// Copyright (c) Seal Report, Eric Pfirsch (sealreport@gmail.com), http://www.sealreport.org.
+// Copyright (c) Seal Report (sealreport@gmail.com), http://www.sealreport.org.
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. http://www.apache.org/licenses/LICENSE-2.0..
 //
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.ComponentModel;
-using Seal.Converter;
 using DynamicTypeDescriptor;
-using System.ComponentModel.Design;
 using System.Drawing.Design;
 using System.Xml.Serialization;
-using System.Data.OleDb;
 using System.Data;
 using Seal.Forms;
 using Seal.Helpers;
@@ -20,6 +16,9 @@ using System.Data.Common;
 
 namespace Seal.Model
 {
+    /// <summary>
+    /// A MetaEnum defines an enumerated list in a MetaData
+    /// </summary>
     public class MetaEnum : RootComponent
     {
         #region Editor
@@ -37,6 +36,11 @@ namespace Seal.Model
                 GetProperty("UsePosition").SetIsBrowsable(true);
                 GetProperty("Translate").SetIsBrowsable(true);
                 GetProperty("Sql").SetIsBrowsable(IsSQL);
+
+                GetProperty("SqlDisplay").SetIsBrowsable(IsSQL);
+                GetProperty("FilterChars").SetIsBrowsable(IsSQL);
+                GetProperty("Message").SetIsBrowsable(IsSQL);
+
                 GetProperty("Values").SetIsBrowsable(IsEditable);
                 GetProperty("NumberOfValues").SetIsBrowsable(true);
 
@@ -45,10 +49,13 @@ namespace Seal.Model
                 GetProperty("HelperRefreshEnum").SetIsBrowsable(IsSQL);
 
                 //Read only
-                GetProperty("Sql").SetIsReadOnly(!IsDynamic);
+                GetProperty("SqlDisplay").SetIsReadOnly(!IsDynamic);
                 GetProperty("IsDbRefresh").SetIsReadOnly(!IsDynamic);
                 GetProperty("Values").SetIsReadOnly(!IsDynamic);
                 GetProperty("NumberOfValues").SetIsReadOnly(true);
+
+                GetProperty("FilterChars").SetIsReadOnly(!HasDynamicDisplay || !HasFilters);
+                GetProperty("Message").SetIsReadOnly(!HasDynamicDisplay || (!HasFilters && !HasDependencies));
 
                 GetProperty("Information").SetIsReadOnly(true);
                 GetProperty("Error").SetIsReadOnly(true);
@@ -59,11 +66,18 @@ namespace Seal.Model
         }
         #endregion
 
+        /// <summary>
+        /// Create a basic enumarated list
+        /// </summary>
+        /// <returns></returns>
         public static MetaEnum Create()
         {
             return new MetaEnum() { GUID = Guid.NewGuid().ToString() };
         }
 
+        /// <summary>
+        /// Name of the enumerated list
+        /// </summary>
         [DefaultValue(null)]
         [Category("Definition"), DisplayName("Name"), Description("Name of the enumerated list."), Id(1, 1)]
         public override string Name
@@ -72,9 +86,12 @@ namespace Seal.Model
             set { _name = value; }
         }
 
-        private Boolean _isDynamic = false;
+        private bool _isDynamic = false;
+        /// <summary>
+        /// If True, the list is loaded using the SQL Select Statement defined
+        /// </summary>
         [DefaultValue(false)]
-        [Category("Definition"), DisplayName("List is dynamically loaded from database"), Description("If True, the list is loaded using the Select SQL statement defined."), Id(2, 1)]
+        [Category("Definition"), DisplayName("List is dynamically loaded from database"), Description("If True, the list is loaded using the SQL Select Statement defined."), Id(2, 1)]
         public Boolean IsDynamic
         {
             get { return _isDynamic; }
@@ -85,67 +102,136 @@ namespace Seal.Model
             }
         }
 
-        private Boolean _isDbRefresh = false;
+        /// <summary>
+        /// If True, the list is loaded before a report execution. Should be set to False if the SQL has poor performances.
+        /// </summary>
         [DefaultValue(false)]
         [Category("Definition"), DisplayName("List is refreshed upon database connection"), Description("If True, the list is loaded before a report execution. Should be set to False if the SQL has poor performances."), Id(3, 1)]
-        public Boolean IsDbRefresh
+        public Boolean IsDbRefresh { get; set; } = false;
+
+        /// <summary>
+        /// True if the list has dynamic display
+        /// </summary>
+        public bool HasDynamicDisplay
         {
-            get { return _isDbRefresh; }
-            set { _isDbRefresh = value; }
+            get { return !string.IsNullOrEmpty(SqlDisplay) && IsDynamic && IsDbRefresh; }
         }
 
-        private Boolean _usePosition = false;
-        [DefaultValue(false)]
-        [Category("Definition"), DisplayName("Use defined position to sort in reports"), Description("If True, the current position of the values in the list is used to sort the column in the report result."), Id(5, 1)]
-        public Boolean UsePosition
-        {
-            get { return _usePosition; }
-            set { _usePosition = value; }
-        }
 
-        private Boolean _translate = false;
-        [DefaultValue(false)]
-        [Category("Definition"), DisplayName("Translate values"), Description("If True, the enumerated values are transalted using the Repository translations."), Id(6, 1)]
-        public Boolean Translate
-        {
-            get { return _translate; }
-            set { _translate = value; }
-        }
-
-        public string DefaultSQL = "select col1,col2 from table order by col2";
-
+        [XmlIgnore]
         private string _sql;
-        [Category("Definition"), DisplayName("Select SQL Statement"), Description("If the list is loaded from the database, SQL Select statement with 1, 2, 3, 4 or 5 columns used to build the list of values. The first column is used for the identifier, the second optional column is the display value shown in the table result, the third optional column is the display value shown in the restriction list, the fourth optional column defines a custom CSS Style applied to the result cell, the fifth optional column defines a custom CSS Class applied to the result cell."), Id(4, 1)]
+
+        /// <summary>
+        /// If the list is loaded from the database, SQL Select statement with 1, 2, 3, 4 or 5 columns used to build the list of values. The first column is used for the identifier, the second optional column is the display value shown in the table result, the third optional column is the display value shown in the restriction list, the fourth optional column defines a custom CSS Style applied to the result cell, the fifth optional column defines a custom CSS Class applied to the result cell.
+        /// </summary>
+        [Category("Definition"), DisplayName("SQL Select Statement"), Description("If the list is loaded from the database, SQL Select statement with 1, 2, 3, 4 or 5 columns used to build the list of values. The first column is used for the identifier, the second optional column is the display value shown in the table result, the third optional column is the display value shown in the restriction list, the fourth optional column defines a custom CSS Style applied to the result cell, the fifth optional column defines a custom CSS Class applied to the result cell."), Id(4, 1)]
         [Editor(typeof(SQLEditor), typeof(UITypeEditor))]
         public string Sql
         {
             get { return _sql; }
-            set { 
+            set
+            {
                 _sql = value;
                 if (IsDynamic && IsDbRefresh && !string.IsNullOrEmpty(_sql) && _dctd != null) RefreshEnum();
             }
         }
 
+        /// <summary>
+        /// If True, the current position of the values in the list is used to sort the column in the report result
+        /// </summary>
+        [DefaultValue(false)]
+        [Category("Definition"), DisplayName("Use defined position to sort in reports"), Description("If True, the current position of the values in the list is used to sort the column in the report result."), Id(5, 1)]
+        public Boolean UsePosition { get; set; } = false;
+
+        /// <summary>
+        /// If True, the enumerated values are translated using the Repository translations
+        /// </summary>
+        [DefaultValue(false)]
+        [Category("Definition"), DisplayName("Translate values"), Description("If True, the enumerated values are translated using the Repository translations."), Id(6, 1)]
+        public Boolean Translate { get; set; } = false;
+
+        [XmlIgnore]
+        private string _sqlDisplay;
+        /// <summary>
+        /// SQL Select Statement used to build the values displayed in a prompted restriction. The SQL is used only if the list is dynamic, refreshed upon database connection.
+        /// </summary>
+        [Category("Dynamic Display"), DisplayName("SQL Select Statement for prompted restriction"), Description("SQL Select Statement used to build the values displayed in a prompted restriction. The SQL can return 1 to 5 columns and follows the definition of 'SQL Select Statement' property. It can contain either the '{EnumFilter}' and/or '{EnumValues_<Name>}' keywords where <Name> is the name of another prompted enumerated list. The SQL is used only if the list is dynamic, refreshed upon database connection."), Id(1, 2)]
+        [Editor(typeof(SQLEditor), typeof(UITypeEditor))]
+        public string SqlDisplay
+        {
+            get { return _sqlDisplay; }
+            set { _sqlDisplay = value;}
+        }
+
+        /// <summary>
+        /// If the list is dynamic, refreshed upon database connection and the SQL for prompted restriction contains the '{EnumFilter}' keyword, the number of characters typed by the used in the filter box before the enum is built and displayed
+        /// </summary>
+        [DefaultValue(2)]
+        [Category("Dynamic Display"), DisplayName("Filter characters to type"), Description("If the list is dynamic, refreshed upon database connection and the SQL for prompted restriction contains the '{EnumFilter}' keyword, the number of characters typed by the used in the filter box before the enum is built and displayed."), Id(2, 2)]
+        public int FilterChars { get; set; } = 2;
+        public bool ShouldSerializeFilterChars() { return HasFilters; }
+
+        /// <summary>
+        /// True if the list has filter
+        /// </summary>
+        [XmlIgnore()]
+        public bool HasFilters
+        {
+            get { return !string.IsNullOrEmpty(SqlDisplay) && SqlDisplay.Contains(Repository.EnumFilterKeyword); }
+        }
+
+        /// <summary>
+        /// True if the list has dependencies to other list
+        /// </summary>
+        [XmlIgnore]
+        public bool HasDependencies
+        {
+            get { return !string.IsNullOrEmpty(SqlDisplay) && SqlDisplay.Contains(Repository.EnumValuesKeyword); }
+        }
+
+        /// <summary>
+        /// If the list is dynamic, refreshed upon database connection and has filter characters or dependencies, the message displayed to the end user to trigger the list (e.g. 'Select a country first' or 'Type 5 characters').
+        /// </summary>
+        [Category("Dynamic Display"), DisplayName("Information message"), Description("If the list is dynamic, refreshed upon database connection and has filter characters or dependencies, the message displayed to the end user to trigger the list (e.g. 'Select a country first' or 'Type 5 characters')."), Id(4, 2)]
+        public string Message { get; set; }
+
         private List<MetaEV> _values = new List<MetaEV>();
+        /// <summary>
+        /// The list of values used for this enumerated list
+        /// </summary>
         [DefaultValue(null)]
-        [Category("Values"), DisplayName("Values"), Description("The list of values used for this enumerated list"), Id(1, 2)]
+        [Category("Values"), DisplayName("Values"), Description("The list of values used for this enumerated list"), Id(1, 3)]
         [Editor(typeof(EnumValueCollectionEditor), typeof(UITypeEditor))]
         public List<MetaEV> Values
         {
-            get { return _values; }
+            get
+            {
+                if (HasDynamicDisplay && _values.Count == 0 && string.IsNullOrEmpty(Error)) RefreshEnum();
+                return _values;
+            }
             set { _values = value; }
         }
+        public bool ShouldSerializeValues() { return !HasDynamicDisplay && _values.Count > 0; }
 
-        [Category("Values"), DisplayName("Number of Values"), Description("The number of values in the collection"), Id(2, 2)]
+        /// <summary>
+        /// The number of values in the collection
+        /// </summary>
+        [Category("Values"), DisplayName("Number of Values"), Description("The number of values in the collection"), Id(2, 3)]
         public int NumberOfValues
         {
             get { return Values.Count; }
         }
 
+        /// <summary>
+        /// True if the list is editable
+        /// </summary>
         [XmlIgnore]
         public bool IsEditable = true;
 
         protected MetaSource _source;
+        /// <summary>
+        /// Current MetaSource
+        /// </summary>
         [XmlIgnore, Browsable(false)]
         public MetaSource Source
         {
@@ -156,6 +242,9 @@ namespace Seal.Model
             }
         }
 
+        /// <summary>
+        /// True if the source is a standard SQL source
+        /// </summary>
         [XmlIgnore]
         public bool IsSQL
         {
@@ -163,48 +252,89 @@ namespace Seal.Model
         }
 
 
-        public void RefreshEnum(bool checkOnly = false)
+        List<MetaEV> getValues(DbConnection connection, string sql)
         {
-            if (_source == null || !IsDynamic) return;
+            var result = new List<MetaEV>();
+            DataTable table = Helper.GetDataTable(connection, sql);
 
-            try
+            if (table.Columns.Count > 0)
             {
-                _error = "";
-                _information = "";
-                DbConnection connection = _source.GetOpenConnection();
-                DataTable table = Helper.GetDataTable(connection, RazorHelper.CompileExecute(Sql, this));
-                connection.Close();
-
-                if (checkOnly) return;
-
-                Values.Clear();
                 foreach (DataRow row in table.Rows)
                 {
-                    if (table.Columns.Count > 0)
+                    if (!row.IsNull(0))
                     {
-                        if (!row.IsNull(0))
-                        {
-                            MetaEV value = new MetaEV();
-                            value.Id = row[0].ToString();
-                            value.Val = table.Columns.Count > 1 ? (row.IsNull(1) ? null : row[1].ToString()) : null;
-                            value.ValR = table.Columns.Count > 2 ? (row.IsNull(2) ? null : row[2].ToString()) : null;
-                            value.Css = table.Columns.Count > 3 ? (row.IsNull(3) ? null : row[3].ToString()) : null;
-                            value.Class = table.Columns.Count > 4 ? (row.IsNull(4) ? null : row[4].ToString()) : null;
-                            Values.Add(value);
-                        }
+                        MetaEV value = new MetaEV();
+                        value.Id = row[0].ToString();
+                        value.Val = table.Columns.Count > 1 ? (row.IsNull(1) ? null : row[1].ToString()) : null;
+                        value.ValR = table.Columns.Count > 2 ? (row.IsNull(2) ? null : row[2].ToString()) : null;
+                        value.Css = table.Columns.Count > 3 ? (row.IsNull(3) ? null : row[3].ToString()) : null;
+                        value.Class = table.Columns.Count > 4 ? (row.IsNull(4) ? null : row[4].ToString()) : null;
+                        result.Add(value);
                     }
                 }
-                _information = string.Format("List refreshed with {0} value(s).", Values.Count);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Returns the list of the enum values to display after applying filter and depencies
+        /// </summary>
+        public List<MetaEV> GetSubSetValues(string filter, Dictionary<MetaEnum, string> dependencies)
+        {
+            DbConnection connection = _source.GetOpenConnection();
+
+            var finalSQL = RazorHelper.CompileExecute(SqlDisplay, this);
+            if (HasDynamicDisplay) finalSQL = finalSQL.Replace(Repository.EnumFilterKeyword + "}", filter);
+            if (HasDynamicDisplay && dependencies != null)
+            {
+                foreach (var d in dependencies.Keys)
+                {
+                    finalSQL = finalSQL.Replace(Repository.EnumValuesKeyword + d.Name + "}", dependencies[d]);
+                }
+            }
+            finalSQL = Helper.ClearAllSQLKeywords(finalSQL);
+
+            return getValues(connection, finalSQL);
+        }
+
+        /// <summary>
+        /// Refresh the values of the enumerated list
+        /// </summary>
+        /// <param name="checkOnly"></param>
+        public void RefreshEnum(bool checkOnly = false)
+        {
+            if (_source == null || !IsDynamic || string.IsNullOrEmpty(Sql)) return;
+
+            DbConnection connection = null;
+            try
+            {
+                Error = "";
+                Information = "";
+                connection = _source.GetOpenConnection();
+                var result = getValues(connection, RazorHelper.CompileExecute(Sql, this));
+                connection.Close();
+                if (checkOnly) return;
+
+                Values = result;
+                Information = string.Format("List refreshed with {0} value(s).", Values.Count);
             }
             catch (Exception ex)
             {
-                _error = ex.Message;
-                _information = "Error got when refreshing the values.";
+                Error = ex.Message;
+                Information = "Error got when refreshing the values.";
             }
-            _information = Helper.FormatMessage(_information);
+            finally
+            {
+                if (connection != null && connection.State == ConnectionState.Open) connection.Close();
+            }
+            Information = Helper.FormatMessage(Information);
             UpdateEditorAttributes();
         }
 
+        /// <summary>
+        /// Return the display value from the identifer
+        /// </summary>
         public string GetDisplayValue(string id, bool forRestriction = false)
         {
             MetaEV value = Values.FirstOrDefault(i => i.Id == id);
@@ -212,7 +342,9 @@ namespace Seal.Model
         }
 
         #region Helpers
-
+        /// <summary>
+        /// Editor Helper: Refresh values of this list using the SQL Statement
+        /// </summary>
         [Category("Helpers"), DisplayName("Refresh values"), Description("Refresh values of this list using the SQL Statement."), Id(1, 10)]
         [Editor(typeof(HelperEditor), typeof(UITypeEditor))]
         public string HelperRefreshEnum
@@ -220,23 +352,19 @@ namespace Seal.Model
             get { return "<Click to refresh enum values>"; }
         }
 
-        string _information;
+        /// <summary>
+        /// Last information message when the enum list has been refreshed
+        /// </summary>
         [XmlIgnore, Category("Helpers"), DisplayName("Information"), Description("Last information message when the enum list has been refreshed."), Id(2, 10)]
         [EditorAttribute(typeof(InformationUITypeEditor), typeof(UITypeEditor))]
-        public string Information
-        {
-            get { return _information; }
-            set { _information = value; }
-        }
+        public string Information { get; set; }
 
-        string _error;
+        /// <summary>
+        /// Last error message
+        /// </summary>
         [XmlIgnore, Category("Helpers"), DisplayName("Error"), Description("Last error message."), Id(3, 10)]
         [EditorAttribute(typeof(ErrorUITypeEditor), typeof(UITypeEditor))]
-        public string Error
-        {
-            get { return _error; }
-            set { _error = value; }
-        }
+        public string Error { get; set; }
 
 
         #endregion
